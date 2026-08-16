@@ -1,0 +1,29 @@
+{
+  "clientName": "Acme Marketing Co.",
+  "oneLiner": "A full-service marketing agency helping mid-market B2B brands turn positioning into pipeline.",
+  "industry": "Marketing & advertising services",
+  "audience": "Founders, CMOs, heads of growth and marketing managers at B2B companies with 50-500 employees",
+  "voice": "Direct, practical, opinionated. Writes like an operator, not a brochure. Short paragraphs, concrete numbers, no hype.",
+  "expertiseAreas": [
+    "Brand positioning and messaging",
+    "Demand generation and paid media",
+    "Content and SEO strategy",
+    "Marketing analytics and attribution",
+    "AI-assisted marketing workflows"
+  ],
+  "goals": [
+    "Build authority with marketing decision makers",
+    "Start conversations that lead to strategy calls"
+  ],
+  "callToActionStyle": "End with an open question that invites the reader's own experience. Never a hard sell.",
+  "hashtagPolicy": "2 to 4 lowercase, specific hashtags at the end. No generic tags like #marketing or #business.",
+  "avoid": [
+    "Political and religious commentary",
+    "Naming or criticising specific competitors",
+    "Claims about client results that are not in this profile",
+    "Financial, medical or legal advice",
+    "Engagement bait ('comment YES below', 'agree?')",
+    "Em-dash-heavy, obviously AI-sounding phrasing"
+  ],
+  "imageStyle": "Clean, modern editorial illustration or abstract data-driven graphic. Muted professional palette. No text or lettering rendered in the image. No photorealistic human faces. No logos or brand marks."
+}

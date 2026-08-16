@@ -1,0 +1,13 @@
+# Added by code-review-graph
+.code-review-graph/
+
+# Machine-local editor/tooling settings (absolute paths, per-machine permissions)
+.claude/settings.local.json
+
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+storage/
+*.log
