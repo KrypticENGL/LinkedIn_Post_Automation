@@ -8,7 +8,10 @@ services:
     name: linkedin-post-automation
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build
+    # --include=dev is required: NODE_ENV=production below makes npm skip
+    # devDependencies, which is where typescript and @types/node live. Without it
+    # the build fails with "Cannot find type definition file for 'node'".
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     # A free service spins down after 15 minutes idle, and a sleeping process is not
     # running the 9am cron or the Telegram polling loop. Point an external pinger
