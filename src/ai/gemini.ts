@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { env } from "../config/env.js";
-import { logger } from "../logger.js";
+import { recordUsage } from "../db/repo.js";
+import { errorMessage, logger } from "../logger.js";
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -95,7 +96,34 @@ type GeminiResponse = {
     finishReason?: string;
   }>;
   promptFeedback?: { blockReason?: string };
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    thoughtsTokenCount?: number;
+    totalTokenCount?: number;
+  };
 };
+
+/**
+ * Books the token counts Gemini reports. Deliberately fire-and-forget — accounting
+ * must never fail a generation, so a write error is logged and dropped.
+ */
+function bookUsage(label: string, model: string, body: GeminiResponse, ok: boolean): void {
+  const usage = body.usageMetadata;
+  if (!usage) return;
+
+  void recordUsage({
+    label,
+    model,
+    promptTokens: usage.promptTokenCount ?? 0,
+    outputTokens: usage.candidatesTokenCount ?? 0,
+    thoughtTokens: usage.thoughtsTokenCount ?? 0,
+    totalTokens: usage.totalTokenCount ?? 0,
+    ok,
+  }).catch((error) => {
+    logger.warn({ label, err: errorMessage(error) }, "Could not record API usage");
+  });
+}
 
 /** finishReason values that mean "the model would not answer", not "the model failed". */
 const REFUSAL_REASONS = new Set(["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII"]);
@@ -189,6 +217,8 @@ export async function structured<T extends z.ZodTypeAny>(
     const category = body.promptFeedback?.blockReason ?? finishReason ?? null;
 
     if (body.promptFeedback?.blockReason || (finishReason && REFUSAL_REASONS.has(finishReason))) {
+      // A refusal still burns quota, so it is booked like any other call.
+      bookUsage(options.label, model, body, false);
       lastRefusal = new ModelRefusalError(
         `Gemini declined the "${options.label}" request (${category ?? "unspecified"})`,
         category,
@@ -198,6 +228,7 @@ export async function structured<T extends z.ZodTypeAny>(
     }
 
     if (finishReason === "MAX_TOKENS") {
+      bookUsage(options.label, model, body, false);
       throw new Error(
         `Gemini hit maxOutputTokens on "${options.label}" — raise maxTokens and retry`,
       );
@@ -222,6 +253,8 @@ export async function structured<T extends z.ZodTypeAny>(
         `Gemini returned non-JSON output for "${options.label}": ${text.slice(0, 200)}`,
       );
     }
+
+    bookUsage(options.label, model, body, true);
 
     // The shape is enforced server-side, but the values are still the model's own.
     return options.schema.parse(payload) as z.infer<T>;

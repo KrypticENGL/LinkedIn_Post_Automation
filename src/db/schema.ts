@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /**
  * Draft lifecycle
@@ -149,6 +149,31 @@ export const conversationState = pgTable("conversation_state", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * One row per Gemini call, written from the token counts the API returns. Persisted
+ * rather than counted in memory so the figures survive a restart or a Render cold
+ * start, which would otherwise reset them every few hours.
+ */
+export const apiUsage = pgTable(
+  "api_usage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** The `label` passed to structured(), e.g. "topic-curation". */
+    label: text("label").notNull(),
+    model: text("model").notNull(),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    totalTokens: integer("total_tokens").notNull().default(0),
+    /** Thinking tokens, billed as output and reported separately by Gemini. */
+    thoughtTokens: integer("thought_tokens").notNull().default(0),
+    /** False when the call was refused or errored — still consumes quota. */
+    ok: boolean("ok").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("api_usage_created_at_idx").on(table.createdAt)],
+);
+
 export type Draft = typeof drafts.$inferSelect;
 export type TopicBatch = typeof topicBatches.$inferSelect;
 export type LinkedinTokenRow = typeof linkedinTokens.$inferSelect;
+export type ApiUsageRow = typeof apiUsage.$inferSelect;

@@ -9,6 +9,7 @@ import {
   listRecentDrafts,
   setConversationState,
   setDraftStatus,
+  summariseUsage,
   updateDraft,
 } from "../db/repo.js";
 import type { RevisionScope, TopicCandidate } from "../db/schema.js";
@@ -47,6 +48,25 @@ function detach(label: string, work: Promise<unknown>): void {
   });
 }
 
+/**
+ * Midnight today in the configured timezone, as an absolute instant. Derived by
+ * subtracting the elapsed local time-of-day from now, so it stays correct without
+ * a timezone library.
+ */
+function startOfLocalDay(): Date {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: env.TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+  const at = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  const elapsed = at("hour") * 3_600_000 + at("minute") * 60_000 + at("second") * 1000;
+  return new Date(now.getTime() - elapsed);
+}
+
 const HELP = [
   "<b>LinkedIn post automation</b>",
   "",
@@ -58,6 +78,7 @@ const HELP = [
   "/topics — fetch today's hot topics now",
   "/status — what's in flight",
   "/recent — the last few drafts",
+  "/usage — Gemini token usage",
   "/auth — connect or reconnect LinkedIn",
   "/whoami — which LinkedIn account is connected",
   "/retry — retry publishing the last failed draft",
@@ -149,6 +170,47 @@ export function registerHandlers(): void {
     }
     await ctx.reply(`Retrying: ${failed.topicTitle}`);
     detach("Retry publish", retryPublish(failed.id));
+  });
+
+  bot.command("usage", async (ctx) => {
+    if (!isApprover(ctx.chat.id)) return;
+    const summary = await summariseUsage(startOfLocalDay());
+
+    if (summary.allTime.calls === 0) {
+      await ctx.reply("No Gemini calls recorded yet. Run /topics to make one.");
+      return;
+    }
+
+    const n = (value: number) => value.toLocaleString("en-US");
+    const line = (name: string, w: typeof summary.today) =>
+      `${name}: <b>${n(w.calls)}</b> call${w.calls === 1 ? "" : "s"}, ${n(w.totalTokens)} tokens` +
+      (w.failed > 0 ? ` (${n(w.failed)} failed)` : "");
+
+    const lines = [
+      "<b>Gemini usage</b>",
+      `Model: <code>${escapeHtml(env.GEMINI_MODEL)}</code> · free tier, no billing`,
+      "",
+      line("Last hour", summary.lastHour),
+      line(`Today (${escapeHtml(env.TIMEZONE)})`, summary.today),
+      line("Last 7 days", summary.last7Days),
+      line("All time", summary.allTime),
+    ];
+
+    if (summary.byLabel.length > 0) {
+      lines.push("", "<b>By step, last 7 days</b>");
+      for (const row of summary.byLabel) {
+        lines.push(
+          `• <code>${escapeHtml(row.label)}</code> — ${n(row.calls)} × ` +
+            `${n(row.promptTokens)} in / ${n(row.outputTokens)} out`,
+        );
+      }
+    }
+
+    if (summary.since) {
+      lines.push("", `<i>Counting since ${summary.since.toISOString().slice(0, 16).replace("T", " ")} UTC</i>`);
+    }
+
+    await ctx.reply(lines.join("\n"), { parse_mode: "HTML" });
   });
 
   bot.command("cancel", async (ctx) => {

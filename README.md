@@ -188,6 +188,7 @@ immediately instead of waiting for the cron.
 | `/topics` | Fetch today's hot topics right now |
 | `/status` | Everything currently in flight |
 | `/recent` | The last five drafts and their outcomes |
+| `/usage` | Gemini token usage — by hour, day, week, and pipeline step |
 | `/auth` | Connect or reconnect LinkedIn (link expires in 15 min) |
 | `/whoami` | Which LinkedIn account is connected, and until when |
 | `/retry` | Retry publishing the most recent failed draft |

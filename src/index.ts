@@ -18,6 +18,7 @@ async function main(): Promise<void> {
     { command: "topics", description: "Fetch today's hot topics" },
     { command: "status", description: "What's in flight" },
     { command: "recent", description: "Recent drafts" },
+    { command: "usage", description: "Gemini token usage" },
     { command: "auth", description: "Connect LinkedIn" },
     { command: "whoami", description: "Show the connected LinkedIn account" },
     { command: "retry", description: "Retry the last failed publish" },

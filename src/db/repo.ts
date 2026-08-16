@@ -1,6 +1,7 @@
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "./client.js";
 import {
+  apiUsage,
   conversationState,
   drafts,
   topicBatches,
@@ -184,6 +185,104 @@ export async function setConversationState(
 
 export async function clearConversationState(chatId: string): Promise<void> {
   await setConversationState(chatId, EMPTY_STATE);
+}
+
+/* --------------------------------------------------------------- api usage */
+
+export type UsageRecord = {
+  label: string;
+  model: string;
+  promptTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  thoughtTokens: number;
+  ok: boolean;
+};
+
+/**
+ * Fire-and-forget: accounting must never take down a generation, so failures are
+ * swallowed here rather than propagated to the caller.
+ */
+export async function recordUsage(entry: UsageRecord): Promise<void> {
+  await db.insert(apiUsage).values(entry);
+}
+
+export type UsageWindow = {
+  calls: number;
+  failed: number;
+  promptTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
+export type UsageByLabel = UsageWindow & { label: string };
+
+const EMPTY_WINDOW: UsageWindow = {
+  calls: 0,
+  failed: 0,
+  promptTokens: 0,
+  outputTokens: 0,
+  totalTokens: 0,
+};
+
+function windowSince(since: Date) {
+  return db
+    .select({
+      calls: sql<number>`count(*)::int`,
+      failed: sql<number>`count(*) filter (where not ${apiUsage.ok})::int`,
+      promptTokens: sql<number>`coalesce(sum(${apiUsage.promptTokens}), 0)::int`,
+      outputTokens: sql<number>`coalesce(sum(${apiUsage.outputTokens}), 0)::int`,
+      totalTokens: sql<number>`coalesce(sum(${apiUsage.totalTokens}), 0)::int`,
+    })
+    .from(apiUsage)
+    .where(gte(apiUsage.createdAt, since));
+}
+
+export type UsageSummary = {
+  lastHour: UsageWindow;
+  today: UsageWindow;
+  last7Days: UsageWindow;
+  allTime: UsageWindow;
+  byLabel: UsageByLabel[];
+  since: Date | null;
+};
+
+/** Powers /usage. `todayStart` is passed in so the caller owns the timezone. */
+export async function summariseUsage(todayStart: Date): Promise<UsageSummary> {
+  const now = Date.now();
+  const hourAgo = new Date(now - 60 * 60 * 1000);
+  const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+  const epoch = new Date(0);
+
+  const [hour, today, week, all, byLabel, oldest] = await Promise.all([
+    windowSince(hourAgo),
+    windowSince(todayStart),
+    windowSince(weekAgo),
+    windowSince(epoch),
+    db
+      .select({
+        label: apiUsage.label,
+        calls: sql<number>`count(*)::int`,
+        failed: sql<number>`count(*) filter (where not ${apiUsage.ok})::int`,
+        promptTokens: sql<number>`coalesce(sum(${apiUsage.promptTokens}), 0)::int`,
+        outputTokens: sql<number>`coalesce(sum(${apiUsage.outputTokens}), 0)::int`,
+        totalTokens: sql<number>`coalesce(sum(${apiUsage.totalTokens}), 0)::int`,
+      })
+      .from(apiUsage)
+      .where(gte(apiUsage.createdAt, weekAgo))
+      .groupBy(apiUsage.label)
+      .orderBy(sql`sum(${apiUsage.totalTokens}) desc`),
+    db.select({ at: apiUsage.createdAt }).from(apiUsage).orderBy(apiUsage.createdAt).limit(1),
+  ]);
+
+  return {
+    lastHour: hour[0] ?? EMPTY_WINDOW,
+    today: today[0] ?? EMPTY_WINDOW,
+    last7Days: week[0] ?? EMPTY_WINDOW,
+    allTime: all[0] ?? EMPTY_WINDOW,
+    byLabel,
+    since: oldest[0]?.at ?? null,
+  };
 }
 
 /** Clears the awaiting-feedback pointer for a specific draft, wherever it is set. */
