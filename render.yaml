@@ -1,0 +1,71 @@
+# Render blueprint. Create the service with:
+#   Render Dashboard -> New -> Blueprint -> pick this repo
+#
+# Every secret below is marked `sync: false`, which means Render prompts for it at
+# deploy time instead of storing it in this file. Nothing sensitive belongs in here.
+services:
+  - type: web
+    name: linkedin-post-automation
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    # A free service spins down after 15 minutes idle, and a sleeping process is not
+    # running the 9am cron or the Telegram polling loop. Point an external pinger
+    # (UptimeRobot, cron-job.org) at /health every ~10 minutes to keep it awake.
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+
+      # Must be the full https URL of this service once Render assigns it, e.g.
+      # https://linkedin-post-automation.onrender.com
+      - key: PUBLIC_BASE_URL
+        sync: false
+      # Must match the Auth tab in the LinkedIn developer portal exactly:
+      # <PUBLIC_BASE_URL>/oauth/linkedin/callback
+      - key: LINKEDIN_REDIRECT_URI
+        sync: false
+
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: LINKEDIN_CLIENT_ID
+        sync: false
+      - key: LINKEDIN_CLIENT_SECRET
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+
+      # Non-secret tuning. Change here rather than in the dashboard.
+      - key: GEMINI_MODEL
+        value: gemini-3.7-flash
+      - key: GEMINI_FALLBACK_MODEL
+        value: gemini-3.5-flash
+      - key: LINKEDIN_API_VERSION
+        value: "202607"
+      - key: IMAGE_PROVIDER
+        value: pollinations
+      - key: IMAGE_WIDTH
+        value: "1200"
+      - key: IMAGE_HEIGHT
+        value: "1200"
+      - key: DAILY_CRON
+        value: 0 9 * * *
+      - key: TIMEZONE
+        value: Asia/Kolkata
+      - key: TOPIC_COUNT
+        value: "5"
+      - key: MAX_REVISIONS
+        value: "8"
+      - key: MODERATION_MAX_RETRIES
+        value: "2"
+      - key: NEWS_QUERIES
+        value: digital marketing,brand strategy,AI in marketing,advertising industry,B2B marketing

@@ -160,7 +160,18 @@ Every handler is locked to that one chat id; anyone else gets turned away.
    profile.
 3. Under **Auth**, add your redirect URL — it must match `LINKEDIN_REDIRECT_URI`
    exactly, e.g. `https://your-app.onrender.com/oauth/linkedin/callback`.
+
+   **It must be HTTPS.** LinkedIn rejects `http://localhost`, so there is no
+   local-only path through the OAuth flow — deploy first, or expose your local port
+   over an HTTPS tunnel such as ngrok. Query strings are stripped and `#` is invalid.
+   You can register several URLs, so a tunnel for development and the deployed URL
+   can coexist.
 4. Copy the client id and secret into `.env`.
+5. Set `LINKEDIN_API_VERSION` to a version that has not been sunset. LinkedIn
+   supports each monthly version for a minimum of one year and then rejects it
+   outright, which surfaces as a deprecation error on every call rather than
+   anything that looks like a bug. Current list:
+   <https://learn.microsoft.com/en-us/linkedin/marketing/versioning>
 
 ### 7. Client profile
 
@@ -199,9 +210,21 @@ immediately instead of waiting for the cron.
 
 ## Deployment
 
-Render free web service + Neon/Supabase Postgres works, with one caveat from the
-blueprint: **a free Render service spins down after 15 minutes idle**, and a sleeping
-service isn't running the Telegram polling loop, so button taps stall until it wakes.
+`render.yaml` in the repo root is a Render blueprint: **New → Blueprint → pick this
+repo** creates the service with the right build and start commands, a `/health` check,
+and prompts for each secret rather than storing it. Non-secret tuning (model, cron,
+timezone, news queries) lives in that file and is versioned with the code.
+
+Two values can only be filled in after Render assigns a URL — set both once the
+service exists, then redeploy:
+
+- `PUBLIC_BASE_URL` — e.g. `https://linkedin-post-automation.onrender.com`
+- `LINKEDIN_REDIRECT_URI` — that URL plus `/oauth/linkedin/callback`, matching the
+  LinkedIn portal's Auth tab character for character
+
+**A free Render service spins down after 15 minutes idle**, and a sleeping service is
+running neither the Telegram polling loop nor the 9am cron — so button taps stall and
+the daily run is silently skipped.
 
 Mitigations, best first:
 
@@ -210,7 +233,7 @@ Mitigations, best first:
 2. Move to Render Starter (~$7/mo), which removes spin-down entirely.
 3. Self-host.
 
-Set every `.env` value as a Render environment variable. Note that `storage/` holds
+Note that `storage/` holds
 generated images and is **ephemeral on Render** — images are uploaded to LinkedIn at
 publish time, so this only matters if a container restarts between generation and
 approval. If that becomes a real problem, move image storage to S3/R2.
