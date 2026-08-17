@@ -1,0 +1,51 @@
+# Keeps the Render free-tier service awake.
+#
+# A free service sleeps after 15 minutes idle, and a sleeping process runs neither the
+# 9am cron nor the Telegram polling loop. It also cannot wake itself: Telegram is reached
+# by long polling, so nothing ever arrives *at* the service to rouse it. The only thing
+# that brings it back is an inbound HTTP request, which is what this workflow sends.
+name: Keep Render awake
+
+on:
+  schedule:
+    # Every 10 minutes, leaving margin inside the 15-minute idle window for GitHub's
+    # scheduler running late — under load it often does, and it may skip runs entirely.
+    - cron: "*/10 * * * *"
+  # Lets you fire one by hand from the Actions tab to test it.
+  workflow_dispatch:
+
+# If the queue backs up, ping once rather than stacking delayed runs on top of each other.
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping /health
+        env:
+          HEALTH_URL: ${{ vars.RENDER_HEALTH_URL }}
+        run: |
+          if [ -z "$HEALTH_URL" ]; then
+            echo "::error::Repository variable RENDER_HEALTH_URL is not set."
+            echo "::error::Set it to https://<your-service>.onrender.com/health"
+            exit 1
+          fi
+
+          # A cold start takes 30-60s, so be patient before calling this a failure.
+          # Retries cover the case where the first request is the one doing the waking.
+          code=$(curl --silent --show-error --location \
+                      --max-time 120 --retry 3 --retry-delay 20 --retry-all-errors \
+                      --output /dev/null --write-out '%{http_code}' \
+                      "$HEALTH_URL")
+
+          echo "HTTP $code from $HEALTH_URL"
+
+          # Failing loudly is deliberate: a red run is the notification that the bot is
+          # down, which is otherwise silent until a post fails to appear.
+          if [ "$code" != "200" ]; then
+            echo "::error::Expected HTTP 200, got $code"
+            exit 1
+          fi
