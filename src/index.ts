@@ -16,6 +16,7 @@ async function main(): Promise<void> {
 
   await bot.api.setMyCommands([
     { command: "topics", description: "Fetch today's hot topics" },
+    { command: "test", description: "Health check and quota left" },
     { command: "status", description: "What's in flight" },
     { command: "recent", description: "Recent drafts" },
     { command: "usage", description: "Gemini token usage" },

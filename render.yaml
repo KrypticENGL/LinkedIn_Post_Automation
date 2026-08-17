@@ -52,6 +52,12 @@ services:
         value: gemini-3.7-flash
       - key: GEMINI_FALLBACK_MODEL
         value: gemini-3.5-flash
+      # Only used to work out the "quota left" figures in /test — Google has no endpoint
+      # that reports this. Keep in step with https://ai.google.dev/gemini-api/docs/rate-limits
+      - key: GEMINI_FREE_RPM
+        value: "10"
+      - key: GEMINI_FREE_RPD
+        value: "250"
       - key: LINKEDIN_API_VERSION
         value: "202607"
       - key: IMAGE_PROVIDER

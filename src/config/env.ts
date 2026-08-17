@@ -18,6 +18,13 @@ const schema = z.object({
   GEMINI_MODEL: z.string().default("gemini-3.7-flash"),
   GEMINI_FALLBACK_MODEL: z.string().default("gemini-3.5-flash"),
 
+  // Google exposes no "quota remaining" endpoint, so /test compares the calls this
+  // bot recorded against the numbers below. They are per model, and they are only as
+  // accurate as you keep them: check your tier's current limits at
+  // https://ai.google.dev/gemini-api/docs/rate-limits and adjust if they change.
+  GEMINI_FREE_RPM: z.coerce.number().int().positive().default(10),
+  GEMINI_FREE_RPD: z.coerce.number().int().positive().default(250),
+
   IMAGE_PROVIDER: z.enum(["pollinations", "huggingface"]).default("pollinations"),
   IMAGE_WIDTH: z.coerce.number().int().positive().default(1200),
   IMAGE_HEIGHT: z.coerce.number().int().positive().default(1200),

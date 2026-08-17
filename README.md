@@ -197,6 +197,7 @@ immediately instead of waiting for the cron.
 | Command | What it does |
 |---|---|
 | `/topics` | Fetch today's hot topics right now |
+| `/test` | Health check — database, Gemini, LinkedIn token, and quota left |
 | `/status` | Everything currently in flight |
 | `/recent` | The last five drafts and their outcomes |
 | `/usage` | Gemini token usage — by hour, day, week, and pipeline step |
@@ -205,6 +206,29 @@ immediately instead of waiting for the cron.
 | `/retry` | Retry publishing the most recent failed draft |
 | `/cancel` | Stop waiting for a reply |
 | `/help` | The above, in the bot |
+
+### `/test` and what "quota left" means
+
+`/test` is the one to reach for when the bot has gone quiet and you want to know whether
+the service is asleep, the database has gone away, or the API key has been revoked. It
+probes each dependency in parallel and reports a status per row: the database with a
+`select 1`, Gemini with a model-metadata read that spends no tokens, and the stored
+LinkedIn token with its remaining validity.
+
+The quota figures are **counted by this bot, not fetched from Google** — the Gemini API
+publishes no quota-remaining endpoint. Every call is already booked to `api_usage`, so
+`/test` counts the rows for each model since midnight Pacific (which is when Google's
+daily counter rolls over, regardless of `TIMEZONE`) and subtracts that from
+`GEMINI_FREE_RPD` / `GEMINI_FREE_RPM`. Two consequences worth knowing:
+
+- **It is a floor, not a guarantee.** A request rejected before it returned token counts
+  — a 429, a dropped connection — still cost quota upstream but never reached the table.
+- **The limits are yours to keep current.** They default to 10 requests/minute and 250
+  requests/day. If your tier differs, set `GEMINI_FREE_RPM` and `GEMINI_FREE_RPD`; the
+  live numbers are at <https://ai.google.dev/gemini-api/docs/rate-limits>.
+
+Primary and fallback models are metered separately by Google, so they are listed
+separately here.
 
 ---
 

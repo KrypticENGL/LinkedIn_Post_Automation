@@ -175,6 +175,33 @@ async function generate(
 }
 
 /**
+ * Cheapest possible liveness probe: a metadata read that proves the key is accepted and
+ * the model name still resolves. It spends no tokens and is not metered against the
+ * generateContent quota, so /test can be run as often as you like.
+ */
+export async function pingModel(model: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/${model}`, {
+    headers: { "x-goog-api-key": env.GEMINI_API_KEY },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    // Google answers with a nested JSON error; lift out the human-readable line so a
+    // status message does not carry a pretty-printed object across five lines.
+    let reason = body.replace(/\s+/g, " ").trim();
+    try {
+      const parsed = JSON.parse(body) as { error?: { message?: string } };
+      if (parsed.error?.message) reason = parsed.error.message;
+    } catch {
+      // Not JSON — the flattened body above is the best available detail.
+    }
+    // 400/403 is almost always a bad or unauthorised key; 404 is a wrong model name.
+    throw new Error(`HTTP ${response.status} — ${reason.slice(0, 160)}`);
+  }
+}
+
+/**
  * Runs a single structured-output request and returns the parsed, schema-validated
  * result. A safety refusal is retried once on the fallback model; anything else is
  * surfaced to the caller.

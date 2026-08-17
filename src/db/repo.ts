@@ -285,6 +285,30 @@ export async function summariseUsage(todayStart: Date): Promise<UsageSummary> {
   };
 }
 
+/**
+ * Call counts per model since `since`. Separate from summariseUsage because quota is
+ * metered by Google per model and per request — tokens and app-local day boundaries,
+ * which that function reports, are the wrong units for it.
+ *
+ * These are the calls that returned usage metadata. A request rejected outright (a 429,
+ * or a network failure) still costs quota upstream but never reaches the table, so this
+ * is a floor on real consumption, not an exact figure.
+ */
+export async function countCallsByModel(since: Date): Promise<Record<string, number>> {
+  const rows = await db
+    .select({ model: apiUsage.model, calls: sql<number>`count(*)::int` })
+    .from(apiUsage)
+    .where(gte(apiUsage.createdAt, since))
+    .groupBy(apiUsage.model);
+
+  return Object.fromEntries(rows.map((row) => [row.model, row.calls]));
+}
+
+/** Round-trips a trivial query so /test proves the pool is usable, not merely configured. */
+export async function pingDb(): Promise<void> {
+  await db.execute(sql`select 1`);
+}
+
 /** Clears the awaiting-feedback pointer for a specific draft, wherever it is set. */
 export async function clearFeedbackWait(draftId: string): Promise<void> {
   await db

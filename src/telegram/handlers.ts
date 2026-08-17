@@ -13,6 +13,7 @@ import {
   updateDraft,
 } from "../db/repo.js";
 import type { RevisionScope, TopicCandidate } from "../db/schema.js";
+import { runHealthChecks, type Check } from "../health.js";
 import { errorMessage, logger } from "../logger.js";
 import { buildAuthorizationUrl, getConnectedAccount } from "../linkedin/oauth.js";
 import { proposeTopics } from "../pipeline/dailyRun.js";
@@ -22,6 +23,7 @@ import {
   retryPublish,
   startDraftFromTopic,
 } from "../pipeline/draftPipeline.js";
+import { formatDuration, startOfDayIn } from "../time.js";
 import { APPROVER_CHAT_ID, bot, isApprover } from "./bot.js";
 import { DRAFT_ACTIONS, parseCallback } from "./keyboards.js";
 import {
@@ -48,25 +50,6 @@ function detach(label: string, work: Promise<unknown>): void {
   });
 }
 
-/**
- * Midnight today in the configured timezone, as an absolute instant. Derived by
- * subtracting the elapsed local time-of-day from now, so it stays correct without
- * a timezone library.
- */
-function startOfLocalDay(): Date {
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: env.TIMEZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(now);
-  const at = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? 0);
-  const elapsed = at("hour") * 3_600_000 + at("minute") * 60_000 + at("second") * 1000;
-  return new Date(now.getTime() - elapsed);
-}
-
 const HELP = [
   "<b>LinkedIn post automation</b>",
   "",
@@ -76,6 +59,7 @@ const HELP = [
   "",
   "<b>Commands</b>",
   "/topics — fetch today's hot topics now",
+  "/test — is the backend live, and how much quota is left",
   "/status — what's in flight",
   "/recent — the last few drafts",
   "/usage — Gemini token usage",
@@ -174,7 +158,7 @@ export function registerHandlers(): void {
 
   bot.command("usage", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-    const summary = await summariseUsage(startOfLocalDay());
+    const summary = await summariseUsage(startOfDayIn(env.TIMEZONE));
 
     if (summary.allTime.calls === 0) {
       await ctx.reply("No Gemini calls recorded yet. Run /topics to make one.");
@@ -211,6 +195,56 @@ export function registerHandlers(): void {
     }
 
     await ctx.reply(lines.join("\n"), { parse_mode: "HTML" });
+  });
+
+  bot.command("test", async (ctx) => {
+    if (!isApprover(ctx.chat.id)) return;
+
+    // The probes take a couple of seconds; say something first so it doesn't look dead.
+    const placeholder = await ctx.reply("Checking…");
+    const report = await runHealthChecks();
+
+    const n = (value: number) => value.toLocaleString("en-US");
+    const HEADLINE = {
+      ok: "🟢 <b>All systems go</b>",
+      warn: "🟡 <b>Up, with warnings</b>",
+      down: "🔴 <b>Something is down</b>",
+    } as const;
+    const ICON = { ok: "✅", warn: "⚠️", down: "❌" } as const;
+
+    const checkLine = (check: Check) =>
+      `${ICON[check.status]} <b>${escapeHtml(check.name)}</b> — ${escapeHtml(check.detail)}` +
+      (check.ms === undefined ? "" : ` <i>(${n(check.ms)} ms)</i>`);
+
+    const lines = [
+      HEADLINE[report.status],
+      `Up ${formatDuration(report.uptimeMs)} · ${escapeHtml(process.version)} · ${escapeHtml(env.NODE_ENV)}`,
+      "",
+      ...report.checks.map(checkLine),
+    ];
+
+    if (report.quota.models.length > 0) {
+      lines.push("", "<b>Gemini quota left</b>");
+      for (const model of report.quota.models) {
+        const perDayLeft = Math.max(0, model.perDay - model.usedToday);
+        const perMinuteLeft = Math.max(0, model.perMinute - model.usedThisMinute);
+        const mark = perDayLeft === 0 ? "⚠️ " : "";
+        lines.push(
+          `${mark}• <code>${escapeHtml(model.model)}</code>${model.role === "fallback" ? " <i>(fallback)</i>" : ""}\n` +
+            `  <b>${n(perDayLeft)}</b> of ${n(model.perDay)} requests left today · ` +
+            `<b>${n(perMinuteLeft)}</b> of ${n(model.perMinute)} left this minute`,
+        );
+      }
+      lines.push(
+        `<i>Resets in ${formatDuration(report.quota.resetsInMs)} (midnight ${escapeHtml(report.quota.timeZone)}).</i>`,
+        "<i>Counted from calls this bot recorded against the limits in GEMINI_FREE_RPD/RPM — " +
+          "Google publishes no quota endpoint, so treat it as a floor, not a guarantee.</i>",
+      );
+    }
+
+    await ctx.api.editMessageText(ctx.chat.id, placeholder.message_id, lines.join("\n"), {
+      parse_mode: "HTML",
+    });
   });
 
   bot.command("cancel", async (ctx) => {
