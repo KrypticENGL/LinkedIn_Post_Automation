@@ -33,6 +33,8 @@ const schema = z.object({
 
   TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN is required"),
   TELEGRAM_CHAT_ID: z.string().min(1, "TELEGRAM_CHAT_ID is required"),
+  /** Leave unset to pick automatically — see `telegramMode` at the bottom of this file. */
+  TELEGRAM_MODE: z.enum(["webhook", "polling"]).optional(),
 
   LINKEDIN_CLIENT_ID: z.string().min(1, "LINKEDIN_CLIENT_ID is required"),
   LINKEDIN_CLIENT_SECRET: z.string().min(1, "LINKEDIN_CLIENT_SECRET is required"),
@@ -72,3 +74,15 @@ if (env.IMAGE_PROVIDER === "huggingface" && !env.HUGGINGFACE_API_KEY) {
 }
 
 export const isProduction = env.NODE_ENV === "production";
+
+/**
+ * How Telegram reaches the bot.
+ *
+ * The two are mutually exclusive at Telegram's end, and long polling allows exactly
+ * one poller per token: a second one gets a 409 and the first is dropped. That fires
+ * on every deploy, because the replacement instance starts before the old one stops.
+ * Webhooks have no such race, but Telegram has to be able to reach the URL — so a
+ * laptop on http://localhost falls back to polling.
+ */
+export const telegramMode: "webhook" | "polling" =
+  env.TELEGRAM_MODE ?? (env.PUBLIC_BASE_URL.startsWith("https://") ? "webhook" : "polling");

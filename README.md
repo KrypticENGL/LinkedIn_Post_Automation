@@ -58,7 +58,7 @@ doesn't undo an earlier fix while applying a new one.
 | Copywriting & curation | Gemini (`gemini-3.7-flash`) | Free tier, `responseSchema` JSON, schema-validated |
 | Image generation | Pollinations (default) or Hugging Face FLUX.1-schnell | Both free; Pollinations needs no key at all |
 | Safety screening | Gemini text classifier + Gemini vision | Fails closed — an errored check blocks the post |
-| Approval | Telegram via grammY, long polling | Two-stage confirmation, persisted state |
+| Approval | Telegram via grammY, webhook in prod | Two-stage confirmation, persisted state |
 | Database | PostgreSQL via Drizzle | Neon / Supabase free tier |
 | LinkedIn | 3-legged OAuth 2.0 + versioned Posts API | `w_member_social`, personal profile only |
 | Secrets at rest | AES-256-GCM | LinkedIn tokens are never stored in plaintext |
@@ -247,9 +247,28 @@ service exists, then redeploy:
 - `LINKEDIN_REDIRECT_URI` — that URL plus `/oauth/linkedin/callback`, matching the
   LinkedIn portal's Auth tab character for character
 
+### How Telegram reaches the bot
+
+Telegram allows exactly one long-polling connection per token and answers `409
+Conflict` to whoever loses. Render starts the replacement instance before it stops the
+old one, so on a polling deploy the two overlap and one of them is dropped — every
+time.
+
+The bot therefore registers a **webhook** at `/telegram/webhook` whenever
+`PUBLIC_BASE_URL` is `https://`, and falls back to **long polling** otherwise, so
+`npm run dev` on a laptop still works. Override with `TELEGRAM_MODE=webhook|polling`
+when the guess is wrong.
+
+Nothing to configure: the webhook URL comes from `PUBLIC_BASE_URL`, and the
+`X-Telegram-Bot-Api-Secret-Token` that authenticates each delivery is derived from the
+bot token, so there is no extra secret to manage. An update arriving without it gets a
+401. Switching modes cleans up after the other one — polling deletes a stale webhook at
+boot, and setting a webhook ends any poll.
+
 **A free Render service spins down after 15 minutes idle**, and a sleeping service is
-running neither the Telegram polling loop nor the 9am cron — so button taps stall and
-the daily run is silently skipped.
+not running the 9am cron — so the daily run is silently skipped. (Button taps survive:
+Telegram retries a webhook delivery that gets no answer, though the first tap after a
+spin-down waits on a cold start.)
 
 Mitigations, best first:
 

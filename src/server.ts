@@ -1,8 +1,11 @@
 import express from "express";
-import { env } from "./config/env.js";
+import { webhookCallback } from "grammy";
+import { env, telegramMode } from "./config/env.js";
 import { consumeState, exchangeCodeForTokens } from "./linkedin/oauth.js";
 import { errorMessage, logger } from "./logger.js";
+import { bot } from "./telegram/bot.js";
 import { notify } from "./telegram/notify.js";
+import { WEBHOOK_PATH, WEBHOOK_SECRET } from "./telegram/webhook.js";
 
 function page(title: string, body: string): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
@@ -13,6 +16,23 @@ code{background:#f2f2f2;padding:.15rem .35rem;border-radius:.25rem}</style></hea
 
 export function createServer() {
   const app = express();
+  app.use(express.json());
+
+  if (telegramMode === "webhook") {
+    // grammY checks the secret header itself and answers 401 when it does not match,
+    // so the path can stay readable.
+    app.post(
+      WEBHOOK_PATH,
+      webhookCallback(bot, "express", {
+        secretToken: WEBHOOK_SECRET,
+        // Telegram redelivers anything it does not get an answer to, and a generation
+        // round takes minutes. Answer 200 and let the detached work carry on rather
+        // than inviting a duplicate update.
+        onTimeout: "return",
+        timeoutMilliseconds: 55_000,
+      }),
+    );
+  }
 
   // Uptime pinger target — keeps a free-tier web service from spinning down.
   app.get("/health", (_req, res) => {
