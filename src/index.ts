@@ -22,6 +22,7 @@ async function main(): Promise<void> {
     { command: "usage", description: "Gemini token usage" },
     { command: "auth", description: "Connect LinkedIn" },
     { command: "whoami", description: "Show the connected LinkedIn account" },
+    { command: "deauth", description: "Release the connected LinkedIn account" },
     { command: "retry", description: "Retry the last failed publish" },
     { command: "cancel", description: "Stop waiting for a reply" },
     { command: "help", description: "How this works" },

@@ -15,7 +15,7 @@ import {
 import type { RevisionScope, TopicCandidate } from "../db/schema.js";
 import { runHealthChecks, type Check } from "../health.js";
 import { errorMessage, logger } from "../logger.js";
-import { buildAuthorizationUrl, getConnectedAccount } from "../linkedin/oauth.js";
+import { buildAuthorizationUrl, disconnectLinkedIn, getConnectedAccount } from "../linkedin/oauth.js";
 import { proposeTopics } from "../pipeline/dailyRun.js";
 import {
   applyReviewerFeedback,
@@ -65,6 +65,7 @@ const HELP = [
   "/usage — Gemini token usage",
   "/auth — connect or reconnect LinkedIn",
   "/whoami — which LinkedIn account is connected",
+  "/deauth — release the connected LinkedIn account",
   "/retry — retry publishing the last failed draft",
   "/cancel — stop waiting for a reply from me",
 ].join("\n");
@@ -140,6 +141,30 @@ export function registerHandlers(): void {
     }
     await ctx.reply(
       `Connected as <code>${escapeHtml(account.memberUrn)}</code>\nToken valid until ${account.expiresAt.toISOString()}`,
+      { parse_mode: "HTML" },
+    );
+  });
+
+  bot.command("deauth", async (ctx) => {
+    if (!isApprover(ctx.chat.id)) return;
+    const released = await disconnectLinkedIn();
+    if (!released) {
+      await ctx.reply("No LinkedIn account is connected, so there is nothing to release.");
+      return;
+    }
+    await ctx.reply(
+      [
+        `Released <code>${escapeHtml(released.memberUrn)}</code>.`,
+        released.revoked
+          ? "The token is revoked at LinkedIn and deleted here."
+          : [
+              "The token is deleted here, but LinkedIn would not revoke it.",
+              "Remove the app under LinkedIn → Settings → Data privacy → Permitted services",
+              "to be sure.",
+            ].join(" "),
+        "",
+        "Nothing can be published until you run /auth again.",
+      ].join("\n"),
       { parse_mode: "HTML" },
     );
   });

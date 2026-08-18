@@ -203,6 +203,7 @@ immediately instead of waiting for the cron.
 | `/usage` | Gemini token usage — by hour, day, week, and pipeline step |
 | `/auth` | Connect or reconnect LinkedIn (link expires in 15 min) |
 | `/whoami` | Which LinkedIn account is connected, and until when |
+| `/deauth` | Release the connected LinkedIn account — revokes the token and deletes it |
 | `/retry` | Retry publishing the most recent failed draft |
 | `/cancel` | Stop waiting for a reply |
 | `/help` | The above, in the bot |

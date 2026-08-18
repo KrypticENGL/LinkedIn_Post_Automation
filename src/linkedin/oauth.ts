@@ -4,11 +4,12 @@ import { db } from "../db/client.js";
 import { linkedinTokens } from "../db/schema.js";
 import { decryptSecret, encryptSecret } from "../crypto/secretBox.js";
 import { env } from "../config/env.js";
-import { logger } from "../logger.js";
+import { errorMessage, logger } from "../logger.js";
 
 const AUTHORIZE_URL = "https://www.linkedin.com/oauth/v2/authorization";
 const TOKEN_URL = "https://www.linkedin.com/oauth/v2/accessToken";
 const USERINFO_URL = "https://api.linkedin.com/v2/userinfo";
+const REVOKE_URL = "https://www.linkedin.com/oauth/v2/revoke";
 
 /**
  * `w_member_social` is the self-service "Open Permission" that allows posting to the
@@ -183,6 +184,64 @@ export async function getLinkedInCredentials(): Promise<{ accessToken: string; m
     .where(eq(linkedinTokens.id, row.id));
 
   return { accessToken: tokens.access_token, memberUrn: row.memberUrn };
+}
+
+/**
+ * Asks LinkedIn to invalidate a token. Best effort by design: the endpoint answers
+ * 200 with an empty body, and any failure here must not stop the local delete —
+ * /deauth is the operator saying "let go of this account", and a credential we no
+ * longer hold is one we cannot post with.
+ */
+async function revokeAtLinkedIn(token: string): Promise<boolean> {
+  try {
+    const response = await fetch(REVOKE_URL, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: env.LINKEDIN_CLIENT_ID,
+        client_secret: env.LINKEDIN_CLIENT_SECRET,
+        token,
+      }).toString(),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (response.ok) return true;
+
+    logger.warn(
+      { status: response.status, body: (await response.text()).slice(0, 300) },
+      "LinkedIn refused the token revoke",
+    );
+    return false;
+  } catch (error) {
+    logger.warn({ err: errorMessage(error) }, "LinkedIn revoke request failed");
+    return false;
+  }
+}
+
+/**
+ * Releases the connected LinkedIn identity: revokes the access token upstream, then
+ * deletes every stored credential. Returns null when nothing was connected.
+ *
+ * The whole table goes, not just the newest row — persist() appends on each /auth,
+ * so older rows are still live credentials for the same or a previous member.
+ * Reversible: /auth connects an account again from scratch.
+ */
+export async function disconnectLinkedIn(): Promise<{ memberUrn: string; revoked: boolean } | null> {
+  const row = await latestToken();
+  if (!row) return null;
+
+  let revoked = false;
+  try {
+    revoked = await revokeAtLinkedIn(decryptSecret(row.accessToken));
+  } catch (error) {
+    // Unreadable ciphertext (TOKEN_ENCRYPTION_KEY was rotated) must not leave the
+    // operator stuck with a row they cannot clear.
+    logger.warn({ err: errorMessage(error) }, "Could not decrypt the stored token to revoke it");
+  }
+
+  await db.delete(linkedinTokens);
+
+  logger.info({ memberUrn: row.memberUrn, revoked }, "Released LinkedIn credentials");
+  return { memberUrn: row.memberUrn, revoked };
 }
 
 export async function getConnectedAccount(): Promise<{ memberUrn: string; expiresAt: Date } | null> {
