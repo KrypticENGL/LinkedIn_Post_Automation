@@ -36,12 +36,6 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      # Only needed when POST_WRITER=claude below. Generate with `claude setup-token`
-      # on a machine with a browser; it lasts a year. Leave blank otherwise.
-      # Never add ANTHROPIC_API_KEY to this service — it outranks this token and posts
-      # would bill a metered API account instead of the subscription.
-      - key: CLAUDE_CODE_OAUTH_TOKEN
-        sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
@@ -64,15 +58,6 @@ services:
         value: "10"
       - key: GEMINI_FREE_RPD
         value: "250"
-
-      # Who writes the posts: "gemini" (free tier) or "claude" (your Pro/Max
-      # subscription, via CLAUDE_CODE_OAUTH_TOKEN above). Curation and both
-      # moderation checks stay on Gemini either way — the safety gate needs vision.
-      # A failed Claude call falls back to Gemini rather than losing the 9am post.
-      - key: POST_WRITER
-        value: gemini
-      - key: CLAUDE_CODE_MODEL
-        value: claude-sonnet-5
       - key: LINKEDIN_API_VERSION
         value: "202607"
       - key: IMAGE_PROVIDER

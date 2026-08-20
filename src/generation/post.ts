@@ -1,9 +1,7 @@
 import { z } from "zod";
-import { structured as geminiStructured } from "../ai/gemini.js";
+import { structured } from "../ai/gemini.js";
 import { renderProfile } from "../config/clientProfile.js";
-import { env } from "../config/env.js";
 import type { FeedbackEntry, RevisionScope, TopicCandidate } from "../db/schema.js";
-import { errorMessage, logger } from "../logger.js";
 
 export const MAX_POST_CHARS = 2800; // LinkedIn's hard limit is 3000; leave headroom.
 
@@ -27,39 +25,6 @@ const postSchema = z.object({
 });
 
 export type GeneratedPost = z.infer<typeof postSchema>;
-
-/**
- * Writing is the one job routed by POST_WRITER — it is where model quality actually
- * shows up in the output, and it is pure text in, JSON out, which is the only shape
- * the subscription path can serve. Curation and moderation stay on Gemini regardless:
- * the safety gate needs vision, and there is no image input on this route.
- *
- * A failed subscription call falls back to Gemini rather than failing the run. The
- * plan's rate limits are shaped for interactive sessions, so a burst of revisions is
- * the likeliest way to run into one — and losing the 9am post to a rate limit would
- * be a worse outcome than a post written by the fallback model.
- */
-async function write(
-  label: string,
-  system: string,
-  prompt: string,
-): Promise<GeneratedPost> {
-  if (env.POST_WRITER === "claude") {
-    try {
-      // Imported on demand: the Agent SDK is a heavy dependency, and on a 512 MB
-      // Render instance there is no reason to hold it in memory when it is switched off.
-      const { structured } = await import("../ai/claudeCode.js");
-      return await structured({ label, system, prompt, schema: postSchema });
-    } catch (error) {
-      logger.warn(
-        { label, err: errorMessage(error) },
-        "Claude Code write failed, falling back to Gemini",
-      );
-    }
-  }
-
-  return geminiStructured({ label, system, prompt, schema: postSchema, maxTokens: 16000 });
-}
 
 const SHARED_RULES = `Hard requirements for the post text:
 - Between 700 and ${MAX_POST_CHARS} characters. Never exceed ${MAX_POST_CHARS}.
@@ -105,7 +70,13 @@ export async function generatePost(topic: TopicCandidate): Promise<GeneratedPost
     "Write the post and the accompanying image prompt.",
   ].join("\n");
 
-  return write("post-generation", SYSTEM, prompt);
+  return structured({
+    label: "post-generation",
+    system: SYSTEM,
+    prompt,
+    schema: postSchema,
+    maxTokens: 16000,
+  });
 }
 
 export type RevisionInput = {
@@ -165,5 +136,11 @@ export async function revisePost(input: RevisionInput): Promise<GeneratedPost> {
     "earlier rounds unless this feedback contradicts them.",
   ].join("\n");
 
-  return write("post-revision", SYSTEM, prompt);
+  return structured({
+    label: "post-revision",
+    system: SYSTEM,
+    prompt,
+    schema: postSchema,
+    maxTokens: 16000,
+  });
 }
