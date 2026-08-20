@@ -128,7 +128,7 @@ async function readQuota(): Promise<HealthReport["quota"]> {
  * alongside. Never throws: a failed probe is a result, not an error.
  */
 export async function runHealthChecks(): Promise<HealthReport> {
-  const [database, gemini, linkedin, quota] = await Promise.all([
+  const [database, gemini, claude, linkedin, quota] = await Promise.all([
     timed("Database", async () => {
       await pingDb();
       return "reachable";
@@ -137,11 +137,20 @@ export async function runHealthChecks(): Promise<HealthReport> {
       await pingModel(env.GEMINI_MODEL);
       return `${env.GEMINI_MODEL} reachable`;
     }),
+    // Only probed when it is actually in the path. Unlike the Gemini ping this costs
+    // a real turn against the subscription, so it is not run for nothing.
+    env.POST_WRITER === "claude"
+      ? timed("Claude Code", async () => {
+          const { pingClaudeCode } = await import("./ai/claudeCode.js");
+          await pingClaudeCode();
+          return `${env.CLAUDE_CODE_MODEL} reachable on subscription`;
+        })
+      : null,
     checkLinkedIn(),
     readQuota().catch(() => null),
   ]);
 
-  const checks = [database, gemini, linkedin];
+  const checks = [database, gemini, ...(claude ? [claude] : []), linkedin];
 
   // Quota rides on the same database as the first check, so a null here is already
   // reported by that row — fall back to an empty view rather than a second error.

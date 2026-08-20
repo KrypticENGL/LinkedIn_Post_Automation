@@ -20,7 +20,7 @@ Nothing is ever published without two separate confirmations from you.
  Telegram: "Today's hot topics"  [1] [2] [3] [4] [5] [✍️ my own] [🔄 new options]
      │  you tap one
      ▼
- Gemini writes the post  ──►  free image model renders the visual
+ the writer model drafts the post  ──►  free image model renders the visual
      │
      ▼
  Safety gate: Gemini reviews the text, and Gemini vision reviews the image
@@ -55,7 +55,8 @@ doesn't undo an earlier fix while applying a new one.
 |---|---|---|
 | Runtime | Node.js 20+ / TypeScript, ESM | |
 | Topic discovery | Google News RSS | Free, no API key, no registration |
-| Copywriting & curation | Gemini (`gemini-3.7-flash`) | Free tier, `responseSchema` JSON, schema-validated |
+| Copywriting | Gemini, or Claude on a Pro/Max subscription | `POST_WRITER` picks; Claude falls back to Gemini on failure |
+| Topic curation | Gemini (`gemini-3.7-flash`) | Free tier, `responseSchema` JSON, schema-validated |
 | Image generation | Pollinations (default) or Hugging Face FLUX.1-schnell | Both free; Pollinations needs no key at all |
 | Safety screening | Gemini text classifier + Gemini vision | Fails closed — an errored check blocks the post |
 | Approval | Telegram via grammY, webhook in prod | Two-stage confirmation, persisted state |
@@ -66,11 +67,17 @@ doesn't undo an earlier fix while applying a new one.
 
 ### Deviations from `BLUEPRINT.md`
 
-- **Gemini, not Claude.** The blueprint specified the Anthropic API, which has no free
-  tier. Gemini's free tier covers all three AI jobs here — curation, copywriting, and
-  both safety checks — including the vision call, with no credit card. All model access
-  goes through one ~180-line module (`src/ai/gemini.ts`) exposing a single `structured()`
-  function, so switching providers again means rewriting that file and nothing else.
+- **Gemini by default, Claude optional.** The blueprint specified the Anthropic API,
+  which has no free tier — a Claude Pro subscription does *not* include API access, and
+  the two are billed separately. So Gemini's free tier is the default and covers all
+  three AI jobs, including the vision call, with no credit card.
+
+  Copywriting can optionally run on a Claude Pro/Max subscription instead — see
+  [Writing posts on a Claude subscription](#optional-writing-posts-on-a-claude-subscription).
+  Curation and both safety checks stay on Gemini either way, because that route has no
+  image input and the gate needs vision. Each provider lives behind one module exposing
+  the same `structured()` function (`src/ai/gemini.ts`, `src/ai/claudeCode.ts`), so
+  switching again means rewriting one file and nothing else.
 - **Topics come from live news, not a static prompt.** The client is a marketing
   agency, so each morning the bot pulls trending business/marketing headlines and asks
   Gemini to turn them into five *distinct* angles you choose from.
@@ -128,6 +135,45 @@ calls.
 improve their products. Everything this bot sends is public-facing marketing copy drafted
 from public news, so the exposure is small — but if the client's brief says otherwise,
 switch to the paid tier (same key, same code) or run a local model instead.
+
+#### Optional: writing posts on a Claude subscription
+
+Set `POST_WRITER=claude` to have posts written and revised by Claude on your existing
+Pro/Max subscription rather than the Gemini free tier. Nothing else moves — curation and
+both moderation checks stay on Gemini, because the safety gate needs vision and this
+route is text-in, JSON-out only.
+
+Generate the token once, on a machine with a browser:
+
+```bash
+claude setup-token          # prints a one-year sk-ant-oat01-… token
+```
+
+Set it as `CLAUDE_CODE_OAUTH_TOKEN`. It's an environment variable rather than a
+credentials file, which is what makes it work on Render — it survives deploys and
+free-tier cold starts, where a `~/.claude` file would not.
+
+Read this part before switching it on:
+
+- **A Claude Pro subscription is not API access.** This path works because the Claude
+  Agent SDK authenticates as your *subscription* and draws on its rate limits. It is not
+  an API key and there is no per-token bill.
+- **Never set `ANTHROPIC_API_KEY` in the same environment.** It outranks the OAuth token
+  in the SDK's credential order, so posts would silently start billing a metered API
+  account. The app refuses to boot if both are set.
+- **Anthropic's [Consumer Terms](https://www.anthropic.com/legal/consumer-terms) §3**
+  prohibit accessing the service "through automated or non-human means, whether through
+  a bot, script, or otherwise," except via an API key or where explicitly permitted.
+  Anthropic explicitly permits `setup-token` for "CI pipelines, scripts, or other
+  environments where interactive browser login isn't available." A daily cron sits
+  closer to that carve-out than not, but a long-running bot service is not obviously
+  "CI" — it's genuinely grey. `POST_WRITER=gemini` is the default for that reason.
+- **Rate limits are shaped for interactive use.** A burst of revisions is the likeliest
+  way to hit one, so a failed Claude call falls back to Gemini rather than losing the
+  9am post. Watch for `Claude Code write failed, falling back to Gemini` in the logs.
+- **It's heavier.** The Agent SDK spawns a bundled CLI process per call. On Render's
+  free 512 MB instance that's the main thing to watch; if you see OOM restarts around
+  9am, this is the first suspect.
 
 ### 4. Encryption key
 
@@ -197,7 +243,7 @@ immediately instead of waiting for the cron.
 | Command | What it does |
 |---|---|
 | `/topics` | Fetch today's hot topics right now |
-| `/test` | Health check — database, Gemini, LinkedIn token, and quota left |
+| `/test` | Health check — database, Gemini, writer model, LinkedIn token, and quota left |
 | `/status` | Everything currently in flight |
 | `/recent` | The last five drafts and their outcomes |
 | `/usage` | Gemini token usage — by hour, day, week, and pipeline step |
