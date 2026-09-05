@@ -39,6 +39,14 @@ body {
   height: 100%;
 }
 
+html {
+  /* Always reserve the scrollbar's width, so switching tabs between a page that
+     overflows and one that doesn't never shifts the layout. scrollbar-gutter:
+     stable is the "correct" fix but doesn't reserve space here once the
+     ::-webkit-scrollbar rules below take over — this does, reliably. */
+  overflow-y: scroll;
+}
+
 body {
   margin: 0;
   background: var(--bg);
