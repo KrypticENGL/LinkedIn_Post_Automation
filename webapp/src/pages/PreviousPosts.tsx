@@ -1,5 +1,6 @@
 import { motion, type Variants } from "framer-motion";
 import { useEffect, useState } from "react";
+import { HexLoader } from "../components/HexLoader";
 import { StatusBadge } from "../components/StatusBadge";
 import type { PostSummary } from "../data/types";
 import { ApiError, listPosts } from "../lib/api";
@@ -56,7 +57,11 @@ export function PreviousPosts() {
         <p className={styles.subtitle}>Every draft Sigmσid has written, and where it ended up.</p>
       </div>
 
-      {state === "loading" && <p className={styles.status}>Loading…</p>}
+      {state === "loading" && (
+        <p className={styles.status}>
+          <HexLoader label="Loading previous posts" />
+        </p>
+      )}
       {state === "error" && <p className={styles.statusError}>{error}</p>}
       {state === "ready" && posts.length === 0 && (
         <p className={styles.status}>No drafts yet — start one from New post.</p>

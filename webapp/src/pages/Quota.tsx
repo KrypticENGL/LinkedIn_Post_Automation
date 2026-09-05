@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { HexLoader } from "../components/HexLoader";
 import type { QuotaReport } from "../data/types";
 import { ApiError, getQuota } from "../lib/api";
 import styles from "./Quota.module.css";
@@ -54,7 +55,9 @@ export function Quota() {
   if (state === "loading") {
     return (
       <div className={styles.page}>
-        <p className={styles.loading}>Loading…</p>
+        <p className={styles.loading}>
+          <HexLoader label="Loading quota" />
+        </p>
       </div>
     );
   }

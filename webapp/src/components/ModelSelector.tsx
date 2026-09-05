@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { HexLoader } from "./HexLoader";
 import type { ModelInfo } from "../data/types";
 import { ApiError, getModel, setModel as apiSetModel } from "../lib/api";
 import styles from "./ModelSelector.module.css";
@@ -65,7 +66,15 @@ export function ModelSelector() {
   }
 
   const activeModel = info?.active ?? info?.default ?? null;
-  const label = error && !info ? "Model unavailable" : saving ? "Switching…" : (activeModel ?? "Loading…");
+  const isBusy = saving || (!info && !error);
+  const label =
+    error && !info ? (
+      "Model unavailable"
+    ) : isBusy ? (
+      <HexLoader length={5} label={saving ? "Switching model" : "Loading model"} />
+    ) : (
+      activeModel
+    );
   const options = info ? [...new Set([info.default, info.fallback])] : [];
 
   return (

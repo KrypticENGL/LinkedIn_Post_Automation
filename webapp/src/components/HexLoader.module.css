@@ -1,0 +1,26 @@
+.root {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.prefix {
+  color: var(--text-faint);
+}
+
+.hex {
+  color: var(--accent-strong);
+  text-shadow: 0 0 6px var(--accent-dim);
+}
+
+.dark .prefix {
+  color: rgba(6, 18, 12, 0.55);
+}
+
+.dark .hex {
+  color: #06120c;
+  text-shadow: none;
+}

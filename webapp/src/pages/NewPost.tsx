@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
+import { HexLoader } from "../components/HexLoader";
 import { ModelSelector } from "../components/ModelSelector";
 import { SlashMenu } from "../components/SlashMenu";
 import { SLASH_COMMANDS, type SlashCommand } from "../data/commands";
@@ -219,11 +220,13 @@ export function NewPost() {
     }
   }
 
-  const submitLabel = submitting
-    ? "Working…"
-    : parsedCommand && KNOWN_COMMANDS.has(parsedCommand.name)
-      ? `Run /${parsedCommand.name}`
-      : "Draft post";
+  const submitLabel = submitting ? (
+    <HexLoader length={5} label="Working" tone="dark" />
+  ) : parsedCommand && KNOWN_COMMANDS.has(parsedCommand.name) ? (
+    `Run /${parsedCommand.name}`
+  ) : (
+    "Draft post"
+  );
 
   return (
     <motion.div
@@ -294,15 +297,17 @@ export function NewPost() {
             onClick={handleSubmit}
           >
             {submitLabel}
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path
-                d="M2 7H12M12 7L7.5 2.5M12 7L7.5 11.5"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            {!submitting && (
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path
+                  d="M2 7H12M12 7L7.5 2.5M12 7L7.5 11.5"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
           </button>
         </div>
       </div>
