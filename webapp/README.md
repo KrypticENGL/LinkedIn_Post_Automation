@@ -1,32 +1,37 @@
-# React + TypeScript + Vite
+# Sigmσid
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The Telegram Mini App frontend for the LinkedIn post automation bot — a Vite +
+React + TypeScript SPA. In production it's served as static files by the main
+Express server (see `../src/server.ts`) and launched from the bot's chat menu
+button (see `../src/index.ts`).
 
-Currently, two official plugins are available:
+## Running it locally
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+This app calls a real backend at `/api/*` (see `../src/miniapp/`), proxied by
+Vite in dev (see `vite.config.ts`) to `http://localhost:3000`. That means two
+processes need to be running:
 
-## React Compiler
+```bash
+# terminal 1, at the repo root — the API server, real DB, real Gemini
+npm run dev:web
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+# terminal 2, in this directory — the frontend with hot reload
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+**Use `npm run dev:web`, not `npm run dev`, at the repo root.** The regular
+`npm run dev` starts the *actual bot*. Locally that runs in polling mode
+(`PUBLIC_BASE_URL` isn't https), which calls Telegram's `deleteWebhook()` and
+takes over message handling from whatever webhook is currently configured —
+i.e. it will disrupt a deployed production bot for as long as it's running.
+`dev:web` boots the same Express app and the same `/api` routes against the
+same real database, but never touches bot polling or the webhook — it's the
+safe way to develop this frontend against real data.
+
+If `/api/*` calls come back as `502`/connection-refused, it's almost always
+because nothing is listening on `http://localhost:3000` — start `dev:web`.
+
+## Build
+
+`npm run build` (also run automatically by the root project's own build step)
+type-checks and produces `dist/`, which `../src/server.ts` serves directly.

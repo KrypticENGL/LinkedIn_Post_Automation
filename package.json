@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:web": "tsx watch src/devServer.ts",
     "build": "tsc -p tsconfig.json && npm ci --prefix webapp && npm run build --prefix webapp",
     "start": "node dist/index.js",
     "db:push": "drizzle-kit push",
