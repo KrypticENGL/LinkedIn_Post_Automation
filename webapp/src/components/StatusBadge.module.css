@@ -1,0 +1,49 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.ok {
+  color: var(--accent-strong);
+  background: var(--accent-dim);
+}
+.ok::before {
+  background: var(--accent);
+}
+
+.warn {
+  color: #f5c04a;
+  background: rgba(245, 192, 74, 0.14);
+}
+.warn::before {
+  background: #f5c04a;
+}
+
+.down {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.14);
+}
+.down::before {
+  background: #ff6b6b;
+}
+
+.neutral {
+  color: var(--text-dim);
+  background: var(--surface);
+}
+.neutral::before {
+  background: var(--text-faint);
+}
