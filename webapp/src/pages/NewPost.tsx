@@ -337,28 +337,44 @@ export function NewPost({ value, onValueChange, entries, onEntriesChange }: Prop
           </div>
         )}
         <AnimatePresence initial={false}>
-          {entries.map((entry) => (
-            <motion.div
-              key={entry.id}
-              className={`${styles.entry} ${styles[entry.tone]}`}
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              {entry.command ? (
-                <div className={styles.entryCommand}>{entry.command}</div>
-              ) : (
-                <div className={styles.entryFromBot}>Sigmσid</div>
-              )}
-              <div className={styles.entryBody} dangerouslySetInnerHTML={{ __html: entry.html }} />
-              {entry.url && (
-                <button type="button" className={styles.entryLink} onClick={() => openLink(entry.url!)}>
-                  Open LinkedIn
-                </button>
-              )}
-            </motion.div>
-          ))}
+          {entries.flatMap((entry) => {
+            const rows = [];
+            // What the user sent — a command or a topic — sits in the left column.
+            if (entry.command) {
+              rows.push(
+                <motion.div
+                  key={`${entry.id}-in`}
+                  className={`${styles.entry} ${styles.inputEntry}`}
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className={styles.entryBody}>{entry.command}</div>
+                </motion.div>,
+              );
+            }
+            // The reply — or a message the bot pushed on its own — sits in the right column.
+            rows.push(
+              <motion.div
+                key={`${entry.id}-out`}
+                className={`${styles.entry} ${styles.outputEntry} ${styles[entry.tone]}`}
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                {!entry.command && <div className={styles.entryFromBot}>Sigmσid</div>}
+                <div className={styles.entryBody} dangerouslySetInnerHTML={{ __html: entry.html }} />
+                {entry.url && (
+                  <button type="button" className={styles.entryLink} onClick={() => openLink(entry.url!)}>
+                    Open LinkedIn
+                  </button>
+                )}
+              </motion.div>,
+            );
+            return rows;
+          })}
         </AnimatePresence>
       </div>
     </motion.div>
