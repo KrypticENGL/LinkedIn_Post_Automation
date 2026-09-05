@@ -1,4 +1,4 @@
-import type { ModelInfo, PostSummary, QuotaReport } from "../data/types";
+import type { ActivityEvent, ModelInfo, PostSummary, QuotaReport } from "../data/types";
 import { getInitData } from "./telegram";
 
 export class ApiError extends Error {}
@@ -33,3 +33,8 @@ export type CommandReply = { html: string; url?: string };
 
 /** Runs a bot command for real — see src/miniapp/router.ts's COMMANDS map. */
 export const runCommand = (name: string) => request<CommandReply>(`/commands/${name}`, { method: "POST" });
+
+/** Bot→approver messages the server teed from Telegram. Pass the previous `cursor`
+ *  as `since` to get only what is new; `since = 0` returns a short catch-up window. */
+export const getActivity = (since: number) =>
+  request<{ events: ActivityEvent[]; cursor: number }>(`/activity?since=${since}`);

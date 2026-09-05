@@ -36,6 +36,15 @@
   margin-bottom: 4px;
 }
 
+.entryFromBot {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+
 .entryBody {
   white-space: pre-wrap;
   word-break: break-word;

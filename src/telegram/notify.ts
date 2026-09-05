@@ -3,6 +3,7 @@ import type { Draft, ModerationReport, TopicBatch } from "../db/schema.js";
 import { describeModeration } from "../moderation/index.js";
 import { setTopicBatchMessageId, updateDraft } from "../db/repo.js";
 import { errorMessage, logger } from "../logger.js";
+import { recordActivity, toneForMessage } from "../miniapp/activity.js";
 import { APPROVER_CHAT_ID, bot } from "./bot.js";
 import {
   blockedKeyboard,
@@ -19,6 +20,7 @@ export function escapeHtml(input: string): string {
 }
 
 export async function notify(text: string): Promise<void> {
+  recordActivity(text, toneForMessage(text));
   await bot.api.sendMessage(CHAT, text, { parse_mode: "HTML" });
 }
 
@@ -53,6 +55,13 @@ export async function sendTopicOptions(batch: TopicBatch): Promise<void> {
     }),
   ];
 
+  // The web app has no pick-a-topic buttons yet, so point it back to Telegram (or
+  // to composing the angle it wants directly).
+  recordActivity(
+    [...lines, "", "<i>Pick one in Telegram, or type the angle you want into the composer.</i>"].join("\n"),
+    "info",
+  );
+
   const message = await bot.api.sendMessage(CHAT, lines.join("\n"), {
     parse_mode: "HTML",
     link_preview_options: { is_disabled: true },
@@ -84,6 +93,11 @@ function reviewBody(draft: Draft, moderation: ModerationReport | null): string {
  */
 export async function presentDraftForReview(draft: Draft): Promise<Draft> {
   await retireMessages(draft);
+
+  recordActivity(
+    [reviewBody(draft, draft.moderation), "", "<i>Approve, reject, or ask for changes in Telegram.</i>"].join("\n"),
+    "info",
+  );
 
   let photoMessageId: number | null = null;
   if (draft.imagePath) {
@@ -126,6 +140,8 @@ export async function presentBlockedDraft(draft: Draft): Promise<Draft> {
     .filter(Boolean)
     .join("\n");
 
+  recordActivity(body, "error");
+
   const message = await bot.api.sendMessage(CHAT, body, {
     parse_mode: "HTML",
     link_preview_options: { is_disabled: true },
@@ -165,34 +181,31 @@ async function retireMessages(draft: Draft): Promise<void> {
 }
 
 export async function announcePublished(draft: Draft, postUrl: string): Promise<void> {
-  await bot.api.sendMessage(
-    CHAT,
-    [
-      "🚀 <b>Posted to LinkedIn.</b>",
-      escapeHtml(draft.topicTitle),
-      "",
-      `<a href="${escapeHtml(postUrl)}">View the post</a>`,
-    ].join("\n"),
-    { parse_mode: "HTML" },
-  );
+  const body = [
+    "🚀 <b>Posted to LinkedIn.</b>",
+    escapeHtml(draft.topicTitle),
+    "",
+    `<a href="${escapeHtml(postUrl)}">View the post</a>`,
+  ].join("\n");
+  recordActivity(body, "success", postUrl);
+  await bot.api.sendMessage(CHAT, body, { parse_mode: "HTML" });
 }
 
 export async function announceFailure(draft: Draft, reason: string): Promise<void> {
-  await bot.api.sendMessage(
-    CHAT,
-    [
-      "❗️ <b>Publishing failed.</b>",
-      escapeHtml(draft.topicTitle),
-      "",
-      `<code>${escapeHtml(reason)}</code>`,
-      "",
-      "The draft is kept. Fix the cause and use /retry to try again.",
-    ].join("\n"),
-    { parse_mode: "HTML" },
-  );
+  const body = [
+    "❗️ <b>Publishing failed.</b>",
+    escapeHtml(draft.topicTitle),
+    "",
+    `<code>${escapeHtml(reason)}</code>`,
+    "",
+    "The draft is kept. Fix the cause and use /retry to try again.",
+  ].join("\n");
+  recordActivity(body, "error");
+  await bot.api.sendMessage(CHAT, body, { parse_mode: "HTML" });
 }
 
 export async function sendWorkingNotice(text: string): Promise<number | null> {
+  recordActivity(text, "info");
   try {
     const message = await bot.api.sendMessage(CHAT, text);
     return message.message_id;

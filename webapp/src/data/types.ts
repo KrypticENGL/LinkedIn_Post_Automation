@@ -48,15 +48,25 @@ export type ModelInfo = {
 };
 
 /**
- * One command-and-reply pair in the New Post composer's transcript. Lifted to
- * App.tsx (see ComposerState there) rather than living in NewPost's own state, so it
- * survives switching to Previous Posts/Quota and back — React Router unmounts the
- * page on every route change, which would otherwise wipe it.
+ * One line in the New Post composer's transcript — either a command the user ran
+ * and its reply (`command` set), or a message the bot pushed on its own that the
+ * server teed to GET /api/activity (`command` absent). Lifted to App.tsx rather
+ * than NewPost's own state so it survives switching to Previous Posts/Quota and
+ * back — React Router unmounts the page on every route change.
  */
 export type ComposerEntry = {
   id: string;
-  command: string;
+  command?: string;
   html: string;
   url?: string;
   tone: "success" | "error" | "info";
+};
+
+/** Matches GET /api/activity — bot→approver messages, newest last. */
+export type ActivityEvent = {
+  id: number;
+  at: string;
+  html: string;
+  tone: "success" | "error" | "info";
+  url?: string;
 };

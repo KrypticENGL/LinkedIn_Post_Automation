@@ -335,7 +335,11 @@ export function NewPost({ value, onValueChange, entries, onEntriesChange }: Prop
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <div className={styles.entryCommand}>{entry.command}</div>
+              {entry.command ? (
+                <div className={styles.entryCommand}>{entry.command}</div>
+              ) : (
+                <div className={styles.entryFromBot}>Sigmσid</div>
+              )}
               <div className={styles.entryBody} dangerouslySetInnerHTML={{ __html: entry.html }} />
               {entry.url && (
                 <button type="button" className={styles.entryLink} onClick={() => openLink(entry.url!)}>

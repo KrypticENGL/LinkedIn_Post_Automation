@@ -19,6 +19,7 @@ import type { Draft, TopicCandidate } from "../db/schema.js";
 import { getActiveGeminiModel, listRecentDrafts, setActiveGeminiModel } from "../db/repo.js";
 import { runHealthChecks } from "../health.js";
 import { errorMessage } from "../logger.js";
+import { activitySince } from "./activity.js";
 import { detach } from "../telegram/notify.js";
 import { startDraftFromTopic } from "../pipeline/draftPipeline.js";
 import { requireApprover } from "./auth.js";
@@ -120,6 +121,21 @@ miniAppRouter.post("/posts", async (req, res) => {
   // rest of the review loop, same as every other entry point into the pipeline.
   res.status(202).json({ ok: true });
   detach("Web app draft", startDraftFromTopic(topic, null));
+});
+
+/* ------------------------------------------------------------------ activity */
+
+/**
+ * Everything the bot has just told the approver — topic lists, "working…" notices,
+ * draft-ready messages, publish results, background failures — teed from the same
+ * `notify()` path that talks to Telegram (see src/miniapp/activity.ts). The web
+ * app polls this so a `/topics` run (whose real output is async) shows up in the
+ * composer, not only in the Telegram chat. Pass back the `cursor` from the last
+ * response as `?since=` to get only what is new.
+ */
+miniAppRouter.get("/activity", (req, res) => {
+  const since = Number.parseInt(String(req.query.since ?? "0"), 10);
+  res.json(activitySince(Number.isFinite(since) ? since : 0));
 });
 
 /* -------------------------------------------------------------- commands */
