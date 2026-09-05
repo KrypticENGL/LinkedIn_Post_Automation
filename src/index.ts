@@ -21,6 +21,7 @@ async function main(): Promise<void> {
     { command: "status", description: "What's in flight" },
     { command: "recent", description: "Recent drafts" },
     { command: "usage", description: "Gemini token usage" },
+    { command: "model", description: "See or switch the Gemini model" },
     { command: "auth", description: "Connect LinkedIn" },
     { command: "whoami", description: "Show the connected LinkedIn account" },
     { command: "deauth", description: "Release the connected LinkedIn account" },
