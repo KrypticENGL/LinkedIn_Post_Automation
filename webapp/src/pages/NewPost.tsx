@@ -148,6 +148,7 @@ export function NewPost() {
                 activeId={filtered[activeIndex]?.id ?? null}
                 onHover={setActiveId}
                 onSelect={selectCommand}
+                onClose={() => setMenuOpen(false)}
               />
             )}
           </AnimatePresence>
