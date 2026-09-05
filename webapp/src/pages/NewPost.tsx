@@ -325,6 +325,17 @@ export function NewPost({ value, onValueChange, entries, onEntriesChange }: Prop
       </div>
 
       <div className={styles.transcript}>
+        {entries.length > 0 && (
+          <div className={styles.transcriptHeader}>
+            <button
+              type="button"
+              className={styles.clearButton}
+              onClick={() => onEntriesChange(() => [])}
+            >
+              Clear
+            </button>
+          </div>
+        )}
         <AnimatePresence initial={false}>
           {entries.map((entry) => (
             <motion.div
