@@ -7,41 +7,28 @@
   pointer-events: none;
 }
 
-.blob {
+.plasma {
   position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.5;
-  will-change: transform;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.3;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
-.blobA {
-  width: 46vw;
-  height: 46vw;
-  top: -10%;
-  left: -8%;
-  background: radial-gradient(circle at 30% 30%, var(--accent), transparent 70%);
-  animation: drift-a 26s ease-in-out infinite;
-}
-
-.blobB {
-  width: 40vw;
-  height: 40vw;
-  top: 10%;
-  right: -12%;
-  background: radial-gradient(circle at 60% 40%, var(--violet), transparent 70%);
-  animation: drift-b 32s ease-in-out infinite;
-  opacity: 0.35;
-}
-
-.blobC {
-  width: 34vw;
-  height: 34vw;
-  bottom: -14%;
-  left: 22%;
-  background: radial-gradient(circle at 50% 50%, var(--pink), transparent 70%);
-  animation: drift-c 30s ease-in-out infinite;
-  opacity: 0.22;
+.scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.22) 0px,
+    rgba(0, 0, 0, 0.22) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: multiply;
+  animation: scanline-flicker 6s steps(30) infinite;
 }
 
 .grid {
@@ -72,7 +59,7 @@
 }
 
 @media (max-width: 640px) {
-  .blob {
-    filter: blur(50px);
+  .plasma {
+    opacity: 0.22;
   }
 }
