@@ -192,9 +192,9 @@ immediately instead of waiting for the cron.
 
 ---
 
-## Bot commands
+## Bot tasks
 
-| Command | What it does |
+| Task | What it does |
 |---|---|
 | `/topics` | Fetch today's hot topics right now |
 | `/test` | Health check — database, Gemini, LinkedIn token, and quota left |
