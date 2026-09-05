@@ -247,86 +247,89 @@ export function NewPost({ value, onValueChange, entries, onEntriesChange }: Prop
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className={styles.header}>
-        <h1 className={styles.title}>What's today's post about?</h1>
-        <p className={styles.subtitle}>
-          Give it a topic or a rough angle. Sigmσid drafts, generates an image, and sends it back for your review —
-          nothing reaches LinkedIn without your confirmation.
-        </p>
-      </div>
-
-      <div
-        ref={cardRef}
-        className={styles.card}
-        onPointerMove={onPointerMove}
-      >
-        <div className={styles.composer}>
-          <textarea
-            ref={textareaRef}
-            className={styles.textarea}
-            placeholder="e.g. why most B2B marketing teams still ship in silos… (type / for tasks)"
-            rows={1}
-            value={value}
-            disabled={submitting}
-            onChange={(e) => {
-              onValueChange(e.target.value);
-              syncSlashState(e.target);
-              resizeTextarea(e.target);
-            }}
-            onClick={(e) => syncSlashState(e.currentTarget)}
-            onKeyUp={(e) => {
-              if (!NAV_KEYS.has(e.key)) syncSlashState(e.currentTarget);
-            }}
-            onKeyDown={onKeyDown}
-          />
-
-          <AnimatePresence>
-            {menuOpen && (
-              <SlashMenu
-                commands={filtered}
-                activeId={filtered[activeIndex]?.id ?? null}
-                onHover={setActiveId}
-                onSelect={selectCommand}
-                onClose={() => setMenuOpen(false)}
-              />
-            )}
-          </AnimatePresence>
+      <div className={styles.inputPane}>
+        <div className={styles.header}>
+          <h1 className={styles.title}>What's today's post about?</h1>
+          <p className={styles.subtitle}>
+            Give it a topic or a rough angle. Sigmσid drafts, generates an image, and sends it back for your review —
+            nothing reaches LinkedIn without your confirmation.
+          </p>
         </div>
 
-        <div className={styles.toolbar}>
-          <div className={styles.toolbarLeft}>
-            <ModelSelector />
-            <button type="button" className={styles.commandsButton} onClick={openCommandPalette}>
-              <span className={styles.slashIcon}>/</span>
-              Tasks
-            </button>
+        <div
+          ref={cardRef}
+          className={styles.card}
+          onPointerMove={onPointerMove}
+        >
+          <div className={styles.composer}>
+            <textarea
+              ref={textareaRef}
+              className={styles.textarea}
+              placeholder="e.g. why most B2B marketing teams still ship in silos… (type / for tasks)"
+              rows={1}
+              value={value}
+              disabled={submitting}
+              onChange={(e) => {
+                onValueChange(e.target.value);
+                syncSlashState(e.target);
+                resizeTextarea(e.target);
+              }}
+              onClick={(e) => syncSlashState(e.currentTarget)}
+              onKeyUp={(e) => {
+                if (!NAV_KEYS.has(e.key)) syncSlashState(e.currentTarget);
+              }}
+              onKeyDown={onKeyDown}
+            />
+
+            <AnimatePresence>
+              {menuOpen && (
+                <SlashMenu
+                  commands={filtered}
+                  activeId={filtered[activeIndex]?.id ?? null}
+                  onHover={setActiveId}
+                  onSelect={selectCommand}
+                  onClose={() => setMenuOpen(false)}
+                />
+              )}
+            </AnimatePresence>
           </div>
 
-          <button
-            type="button"
-            className={styles.submit}
-            disabled={value.trim().length === 0 || submitting}
-            onClick={handleSubmit}
-          >
-            {submitLabel}
-            {!submitting && (
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path
-                  d="M2 7H12M12 7L7.5 2.5M12 7L7.5 11.5"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            )}
-          </button>
+          <div className={styles.toolbar}>
+            <div className={styles.toolbarLeft}>
+              <ModelSelector />
+              <button type="button" className={styles.commandsButton} onClick={openCommandPalette}>
+                <span className={styles.slashIcon}>/</span>
+                Tasks
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className={styles.submit}
+              disabled={value.trim().length === 0 || submitting}
+              onClick={handleSubmit}
+            >
+              {submitLabel}
+              {!submitting && (
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path
+                    d="M2 7H12M12 7L7.5 2.5M12 7L7.5 11.5"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className={styles.transcript}>
-        {entries.length > 0 && (
-          <div className={styles.transcriptHeader}>
+      <div className={styles.outputPane}>
+        <div className={styles.outputHeader}>
+          <span className={styles.outputTitle}>Output</span>
+          {entries.length > 0 && (
             <button
               type="button"
               className={styles.clearButton}
@@ -334,48 +337,41 @@ export function NewPost({ value, onValueChange, entries, onEntriesChange }: Prop
             >
               Clear
             </button>
-          </div>
-        )}
-        <AnimatePresence initial={false}>
-          {entries.flatMap((entry) => {
-            const rows = [];
-            // What the user sent — a command or a topic — sits in the left column.
-            if (entry.command) {
-              rows.push(
+          )}
+        </div>
+
+        {entries.length === 0 ? (
+          <p className={styles.emptyOutput}>
+            Replies and anything Sigmσid sends you land here — as well as in the Telegram chat.
+          </p>
+        ) : (
+          <div className={styles.transcript}>
+            <AnimatePresence initial={false}>
+              {entries.map((entry) => (
                 <motion.div
-                  key={`${entry.id}-in`}
-                  className={`${styles.entry} ${styles.inputEntry}`}
+                  key={entry.id}
+                  className={`${styles.entry} ${styles[entry.tone]}`}
                   initial={{ opacity: 0, y: -8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <div className={styles.entryBody}>{entry.command}</div>
-                </motion.div>,
-              );
-            }
-            // The reply — or a message the bot pushed on its own — sits in the right column.
-            rows.push(
-              <motion.div
-                key={`${entry.id}-out`}
-                className={`${styles.entry} ${styles.outputEntry} ${styles[entry.tone]}`}
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                {!entry.command && <div className={styles.entryFromBot}>Sigmσid</div>}
-                <div className={styles.entryBody} dangerouslySetInnerHTML={{ __html: entry.html }} />
-                {entry.url && (
-                  <button type="button" className={styles.entryLink} onClick={() => openLink(entry.url!)}>
-                    Open LinkedIn
-                  </button>
-                )}
-              </motion.div>,
-            );
-            return rows;
-          })}
-        </AnimatePresence>
+                  {entry.command ? (
+                    <div className={styles.entryCommand}>{entry.command}</div>
+                  ) : (
+                    <div className={styles.entryFromBot}>Sigmσid</div>
+                  )}
+                  <div className={styles.entryBody} dangerouslySetInnerHTML={{ __html: entry.html }} />
+                  {entry.url && (
+                    <button type="button" className={styles.entryLink} onClick={() => openLink(entry.url!)}>
+                      Open LinkedIn
+                    </button>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
     </motion.div>
   );
