@@ -1,6 +1,6 @@
 import { pingModel } from "./ai/gemini.js";
 import { env } from "./config/env.js";
-import { countCallsByModel, pingDb } from "./db/repo.js";
+import { countCallsByModel, getActiveGeminiModel, pingDb } from "./db/repo.js";
 import { getConnectedAccount } from "./linkedin/oauth.js";
 import { errorMessage } from "./logger.js";
 import { startOfDayIn } from "./time.js";
@@ -97,14 +97,15 @@ async function readQuota(): Promise<HealthReport["quota"]> {
   const dayStart = startOfDayIn(QUOTA_TIMEZONE);
   const minuteAgo = new Date(Date.now() - 60_000);
 
-  const [today, thisMinute] = await Promise.all([
+  const [today, thisMinute, primaryModel] = await Promise.all([
     countCallsByModel(dayStart),
     countCallsByModel(minuteAgo),
+    getActiveGeminiModel().then((model) => model ?? env.GEMINI_MODEL),
   ]);
 
   // The fallback is only listed when it is genuinely a second model.
-  const chain: Array<[string, ModelQuota["role"]]> = [[env.GEMINI_MODEL, "primary"]];
-  if (env.GEMINI_FALLBACK_MODEL !== env.GEMINI_MODEL) {
+  const chain: Array<[string, ModelQuota["role"]]> = [[primaryModel, "primary"]];
+  if (env.GEMINI_FALLBACK_MODEL !== primaryModel) {
     chain.push([env.GEMINI_FALLBACK_MODEL, "fallback"]);
   }
 
@@ -134,8 +135,9 @@ export async function runHealthChecks(): Promise<HealthReport> {
       return "reachable";
     }),
     timed("Gemini API", async () => {
-      await pingModel(env.GEMINI_MODEL);
-      return `${env.GEMINI_MODEL} reachable`;
+      const model = (await getActiveGeminiModel()) ?? env.GEMINI_MODEL;
+      await pingModel(model);
+      return `${model} reachable`;
     }),
     checkLinkedIn(),
     readQuota().catch(() => null),

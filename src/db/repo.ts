@@ -2,6 +2,7 @@ import { desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "./client.js";
 import {
   apiUsage,
+  botSettings,
   conversationState,
   drafts,
   topicBatches,
@@ -185,6 +186,29 @@ export async function setConversationState(
 
 export async function clearConversationState(chatId: string): Promise<void> {
   await setConversationState(chatId, EMPTY_STATE);
+}
+
+/* ------------------------------------------------------------ bot settings */
+
+/** Null means "no override" — the caller should fall back to the env default. */
+export async function getActiveGeminiModel(): Promise<string | null> {
+  const rows = await db
+    .select({ geminiModel: botSettings.geminiModel })
+    .from(botSettings)
+    .where(eq(botSettings.id, "global"))
+    .limit(1);
+  return rows[0]?.geminiModel ?? null;
+}
+
+/** Pass `null` to clear the override and go back to the env default. */
+export async function setActiveGeminiModel(model: string | null): Promise<void> {
+  await db
+    .insert(botSettings)
+    .values({ id: "global", geminiModel: model, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: botSettings.id,
+      set: { geminiModel: model, updatedAt: new Date() },
+    });
 }
 
 /* --------------------------------------------------------------- api usage */

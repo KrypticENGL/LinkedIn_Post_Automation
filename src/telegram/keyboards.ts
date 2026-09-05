@@ -20,12 +20,20 @@ export type DraftAction = (typeof DRAFT_ACTIONS)[keyof typeof DRAFT_ACTIONS];
 
 export const draftCb = (draftId: string, action: DraftAction) => `d|${draftId}|${action}`;
 export const topicCb = (batchId: string, key: string) => `t|${batchId}|${key}`;
+/** "-" fills the unused id slot so this fits the same kind|id|action shape. */
+export const MODEL_RESET_CB = "m|-|rs";
 
-export function parseCallback(data: string): { kind: "d" | "t"; id: string; action: string } | null {
+export function parseCallback(
+  data: string,
+): { kind: "d" | "t" | "m"; id: string; action: string } | null {
   const [kind, id, action] = data.split("|");
-  if ((kind !== "d" && kind !== "t") || !id || !action) return null;
+  if ((kind !== "d" && kind !== "t" && kind !== "m") || !id || !action) return null;
   return { kind, id, action };
 }
+
+/** Offered after /model reports an override is active, to go back to the env default. */
+export const modelResetKeyboard = () =>
+  new InlineKeyboard().text("↩️ Use the default model", MODEL_RESET_CB);
 
 export function topicKeyboard(batchId: string, topics: TopicCandidate[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();

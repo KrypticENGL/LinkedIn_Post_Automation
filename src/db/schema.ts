@@ -137,6 +137,17 @@ export const linkedinTokens = pgTable("linkedin_tokens", {
  * Telegram conversation state, persisted so an in-flight "reply with your
  * changes" prompt survives a restart or a Render cold start.
  */
+/**
+ * Single-row table (id is always "global") holding runtime overrides that would
+ * otherwise need an env var change and a redeploy — currently just which Gemini
+ * model to call. Null means "use the env default".
+ */
+export const botSettings = pgTable("bot_settings", {
+  id: text("id").primaryKey().default("global"),
+  geminiModel: text("gemini_model"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const conversationState = pgTable("conversation_state", {
   chatId: text("chat_id").primaryKey(),
   awaitingFeedbackDraftId: uuid("awaiting_feedback_draft_id").references(() => drafts.id, {

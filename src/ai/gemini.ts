@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { env } from "../config/env.js";
-import { recordUsage } from "../db/repo.js";
+import { getActiveGeminiModel, recordUsage } from "../db/repo.js";
 import { errorMessage, logger } from "../logger.js";
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -213,7 +213,11 @@ export async function structured<T extends z.ZodTypeAny>(
     z.toJSONSchema(options.schema, { target: "openapi-3.0", io: "output", reused: "inline" }),
   );
 
-  const models = [env.GEMINI_MODEL, env.GEMINI_FALLBACK_MODEL];
+  const primaryModel = (await getActiveGeminiModel()) ?? env.GEMINI_MODEL;
+  const models =
+    primaryModel === env.GEMINI_FALLBACK_MODEL
+      ? [primaryModel]
+      : [primaryModel, env.GEMINI_FALLBACK_MODEL];
   let lastRefusal: ModelRefusalError | null = null;
   let lastTransient: TransientError | null = null;
 

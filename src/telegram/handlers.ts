@@ -1,12 +1,15 @@
 import type { Context, Filter } from "grammy";
+import { pingModel } from "../ai/gemini.js";
 import { env } from "../config/env.js";
 import {
   clearConversationState,
+  getActiveGeminiModel,
   getConversationState,
   getDraft,
   getTopicBatch,
   listActiveDrafts,
   listRecentDrafts,
+  setActiveGeminiModel,
   setConversationState,
   setDraftStatus,
   summariseUsage,
@@ -25,7 +28,7 @@ import {
 } from "../pipeline/draftPipeline.js";
 import { formatDuration, startOfDayIn } from "../time.js";
 import { APPROVER_CHAT_ID, bot, isApprover } from "./bot.js";
-import { DRAFT_ACTIONS, parseCallback } from "./keyboards.js";
+import { DRAFT_ACTIONS, modelResetKeyboard, parseCallback } from "./keyboards.js";
 import {
   escapeHtml,
   notify,
@@ -63,6 +66,7 @@ const HELP = [
   "/status — what's in flight",
   "/recent — the last few drafts",
   "/usage — Gemini token usage",
+  "/model — see or switch which Gemini model is in use",
   "/auth — connect or reconnect LinkedIn",
   "/whoami — which LinkedIn account is connected",
   "/deauth — release the connected LinkedIn account",
@@ -115,6 +119,66 @@ export function registerHandlers(): void {
       return `• ${when} — <b>${escapeHtml(draft.topicTitle)}</b> (${draft.status})`;
     });
     await ctx.reply(lines.join("\n"), { parse_mode: "HTML" });
+  });
+
+  bot.command("model", async (ctx) => {
+    if (!isApprover(ctx.chat.id)) return;
+
+    const requested = ctx.match.trim();
+    const activeModel = await getActiveGeminiModel();
+
+    if (!requested) {
+      const lines = [
+        `Using <code>${escapeHtml(activeModel ?? env.GEMINI_MODEL)}</code>` +
+          (activeModel ? " — an override, not the env default." : " — the env default."),
+        `Fallback stays <code>${escapeHtml(env.GEMINI_FALLBACK_MODEL)}</code> either way.`,
+        "",
+        "To switch: <code>/model gemini-2.5-pro</code> (any model name Google's API accepts).",
+      ];
+      await ctx.reply(lines.join("\n"), {
+        parse_mode: "HTML",
+        ...(activeModel ? { reply_markup: modelResetKeyboard() } : {}),
+      });
+      return;
+    }
+
+    if (requested === "default" || requested === "reset") {
+      if (!activeModel) {
+        await ctx.reply(`Already on the default: <code>${escapeHtml(env.GEMINI_MODEL)}</code>`, {
+          parse_mode: "HTML",
+        });
+        return;
+      }
+      await setActiveGeminiModel(null);
+      await ctx.reply(`Back to the default model: <code>${escapeHtml(env.GEMINI_MODEL)}</code>`, {
+        parse_mode: "HTML",
+      });
+      return;
+    }
+
+    const placeholder = await ctx.reply(`Checking <code>${escapeHtml(requested)}</code>…`, {
+      parse_mode: "HTML",
+    });
+    try {
+      await pingModel(requested);
+    } catch (error) {
+      await ctx.api.editMessageText(
+        ctx.chat.id,
+        placeholder.message_id,
+        `Could not use <code>${escapeHtml(requested)}</code>: ${escapeHtml(errorMessage(error))}`,
+        { parse_mode: "HTML" },
+      );
+      return;
+    }
+
+    await setActiveGeminiModel(requested);
+    await ctx.api.editMessageText(
+      ctx.chat.id,
+      placeholder.message_id,
+      `Switched to <code>${escapeHtml(requested)}</code>. Topics, posts, and moderation all use it now — ` +
+        `<code>/model default</code> to go back to <code>${escapeHtml(env.GEMINI_MODEL)}</code>.`,
+      { parse_mode: "HTML" },
+    );
   });
 
   bot.command("auth", async (ctx) => {
@@ -183,7 +247,10 @@ export function registerHandlers(): void {
 
   bot.command("usage", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-    const summary = await summariseUsage(startOfDayIn(env.TIMEZONE));
+    const [summary, activeModel] = await Promise.all([
+      summariseUsage(startOfDayIn(env.TIMEZONE)),
+      getActiveGeminiModel(),
+    ]);
 
     if (summary.allTime.calls === 0) {
       await ctx.reply("No Gemini calls recorded yet. Run /topics to make one.");
@@ -197,7 +264,9 @@ export function registerHandlers(): void {
 
     const lines = [
       "<b>Gemini usage</b>",
-      `Model: <code>${escapeHtml(env.GEMINI_MODEL)}</code> · free tier, no billing`,
+      `Model: <code>${escapeHtml(activeModel ?? env.GEMINI_MODEL)}</code>` +
+        (activeModel ? " (switched via /model)" : "") +
+        " · free tier, no billing",
       "",
       line("Last hour", summary.lastHour),
       line(`Today (${escapeHtml(env.TIMEZONE)})`, summary.today),
@@ -294,6 +363,14 @@ export function registerHandlers(): void {
 
     if (parsed.kind === "t") {
       await handleTopicCallback(ctx, parsed.id, parsed.action);
+      return;
+    }
+    if (parsed.kind === "m") {
+      await setActiveGeminiModel(null);
+      await ctx.answerCallbackQuery({ text: "Back to the default model." });
+      await ctx.editMessageText(`Back to the default model: <code>${escapeHtml(env.GEMINI_MODEL)}</code>`, {
+        parse_mode: "HTML",
+      });
       return;
     }
     await handleDraftCallback(ctx, parsed.id, parsed.action);
