@@ -2,6 +2,19 @@ import { Router } from "express";
 import { z } from "zod";
 import { pingModel } from "../ai/gemini.js";
 import { env } from "../config/env.js";
+import {
+  buildDeauthMessage,
+  buildRecentMessage,
+  buildStatusMessage,
+  buildTestMessage,
+  buildUsageMessage,
+  buildWhoamiMessage,
+  HELP_MESSAGE,
+  runAuth,
+  runCancel,
+  runRetry,
+  runTopics,
+} from "../commands/index.js";
 import type { Draft, TopicCandidate } from "../db/schema.js";
 import { getActiveGeminiModel, listRecentDrafts, setActiveGeminiModel } from "../db/repo.js";
 import { runHealthChecks } from "../health.js";
@@ -107,4 +120,39 @@ miniAppRouter.post("/posts", async (req, res) => {
   // rest of the review loop, same as every other entry point into the pipeline.
   res.status(202).json({ ok: true });
   detach("Web app draft", startDraftFromTopic(topic, null));
+});
+
+/* -------------------------------------------------------------- commands */
+
+/**
+ * Every bot command that isn't tied to a specific draft's inline keyboard (those —
+ * approve/reject/confirm/revise a particular message — only make sense as a Telegram
+ * callback and stay there). Each one calls the exact same function as the matching
+ * bot.command() in src/telegram/handlers.ts, so it does the same real thing and says
+ * the same thing — just answered as JSON instead of a Telegram message.
+ */
+const COMMANDS: Record<string, () => Promise<{ html: string; url?: string }>> = {
+  help: async () => ({ html: HELP_MESSAGE }),
+  topics: async () => ({ html: runTopics() }),
+  status: async () => ({ html: await buildStatusMessage() }),
+  recent: async () => ({ html: await buildRecentMessage() }),
+  usage: async () => ({ html: await buildUsageMessage() }),
+  test: async () => ({ html: await buildTestMessage() }),
+  whoami: async () => ({ html: await buildWhoamiMessage() }),
+  deauth: async () => ({ html: await buildDeauthMessage() }),
+  retry: async () => ({ html: await runRetry() }),
+  cancel: async () => ({ html: await runCancel() }),
+  auth: async () => {
+    const { text, url } = runAuth();
+    return { html: text, url };
+  },
+};
+
+miniAppRouter.post("/commands/:name", async (req, res) => {
+  const run = COMMANDS[req.params.name];
+  if (!run) {
+    res.status(404).json({ error: `Unknown command: /${req.params.name}` });
+    return;
+  }
+  res.json(await run());
 });

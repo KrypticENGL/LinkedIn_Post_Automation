@@ -5,6 +5,8 @@ import styles from "./SlashMenu.module.css";
 
 const GROUP_LABEL: Record<SlashCommand["group"], string> = {
   compose: "Compose",
+  status: "Status",
+  account: "LinkedIn",
   control: "Control",
 };
 
@@ -22,7 +24,7 @@ type Props = {
  * by typing into the textarea underneath — this only owns presentation.
  */
 export function SlashMenu({ commands, activeId, onSelect, onHover, onClose }: Props) {
-  const groups = (["compose", "control"] as const)
+  const groups = (["compose", "status", "account", "control"] as const)
     .map((group) => ({ group, items: commands.filter((c) => c.group === group) }))
     .filter((g) => g.items.length > 0);
 

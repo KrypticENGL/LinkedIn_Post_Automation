@@ -28,3 +28,8 @@ export const createPost = (topic: string) =>
   request<{ ok: true }>("/posts", { method: "POST", body: JSON.stringify({ topic }) });
 
 export const getQuota = () => request<QuotaReport>("/quota");
+
+export type CommandReply = { html: string; url?: string };
+
+/** Runs a bot command for real — see src/miniapp/router.ts's COMMANDS map. */
+export const runCommand = (name: string) => request<CommandReply>(`/commands/${name}`, { method: "POST" });

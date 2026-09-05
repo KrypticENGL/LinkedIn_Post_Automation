@@ -2,62 +2,36 @@ import type { Context, Filter } from "grammy";
 import { pingModel } from "../ai/gemini.js";
 import { env } from "../config/env.js";
 import {
+  buildDeauthMessage,
+  buildRecentMessage,
+  buildStatusMessage,
+  buildTestMessage,
+  buildUsageMessage,
+  buildWhoamiMessage,
+  HELP_MESSAGE,
+  runAuth,
+  runCancel,
+  runRetry,
+  runTopics,
+} from "../commands/index.js";
+import {
   clearConversationState,
   getActiveGeminiModel,
   getConversationState,
   getDraft,
   getTopicBatch,
-  listActiveDrafts,
-  listRecentDrafts,
   setActiveGeminiModel,
   setConversationState,
   setDraftStatus,
-  summariseUsage,
   updateDraft,
 } from "../db/repo.js";
 import type { RevisionScope, TopicCandidate } from "../db/schema.js";
-import { runHealthChecks, type Check } from "../health.js";
 import { errorMessage } from "../logger.js";
-import { buildAuthorizationUrl, disconnectLinkedIn, getConnectedAccount } from "../linkedin/oauth.js";
 import { proposeTopics } from "../pipeline/dailyRun.js";
-import {
-  applyReviewerFeedback,
-  publishDraft,
-  retryPublish,
-  startDraftFromTopic,
-} from "../pipeline/draftPipeline.js";
-import { formatDuration, startOfDayIn } from "../time.js";
+import { applyReviewerFeedback, publishDraft, startDraftFromTopic } from "../pipeline/draftPipeline.js";
 import { APPROVER_CHAT_ID, bot, isApprover } from "./bot.js";
 import { DRAFT_ACTIONS, modelResetKeyboard, parseCallback } from "./keyboards.js";
-import {
-  detach,
-  escapeHtml,
-  notify,
-  showConfirmKeyboard,
-  showRejectKeyboard,
-  showReviewKeyboard,
-} from "./notify.js";
-
-const HELP = [
-  "<b>LinkedIn post automation</b>",
-  "",
-  `Every day at <code>${env.DAILY_CRON}</code> (${env.TIMEZONE}) I fetch the hottest business and marketing stories, turn them into ${env.TOPIC_COUNT} topic options, and ask you to pick one.`,
-  "",
-  "Then: I write the post, generate an image, run both through a safety check, and send them here for approval. Nothing reaches LinkedIn without your explicit confirmation.",
-  "",
-  "<b>Commands</b>",
-  "/topics — fetch today's hot topics now",
-  "/test — is the backend live, and how much quota is left",
-  "/status — what's in flight",
-  "/recent — the last few drafts",
-  "/usage — Gemini token usage",
-  "/model — see or switch which Gemini model is in use",
-  "/auth — connect or reconnect LinkedIn",
-  "/whoami — which LinkedIn account is connected",
-  "/deauth — release the connected LinkedIn account",
-  "/retry — retry publishing the last failed draft",
-  "/cancel — stop waiting for a reply from me",
-].join("\n");
+import { detach, escapeHtml, showConfirmKeyboard, showRejectKeyboard, showReviewKeyboard } from "./notify.js";
 
 export function registerHandlers(): void {
   /* ----------------------------------------------------------- commands */
@@ -69,41 +43,22 @@ export function registerHandlers(): void {
       );
       return;
     }
-    await ctx.reply(HELP, { parse_mode: "HTML" });
+    await ctx.reply(HELP_MESSAGE, { parse_mode: "HTML" });
   });
 
   bot.command("topics", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-    await ctx.reply("On it.");
-    detach("Topic scan", proposeTopics());
+    await ctx.reply(runTopics());
   });
 
   bot.command("status", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-    const active = await listActiveDrafts();
-    if (active.length === 0) {
-      await ctx.reply("Nothing in flight. Use /topics to start something.");
-      return;
-    }
-    const lines = active.map(
-      (draft) =>
-        `• <b>${escapeHtml(draft.topicTitle)}</b>\n  ${draft.status} · revision ${draft.revisionCount}`,
-    );
-    await ctx.reply(["<b>In flight</b>", ...lines].join("\n"), { parse_mode: "HTML" });
+    await ctx.reply(await buildStatusMessage(), { parse_mode: "HTML" });
   });
 
   bot.command("recent", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-    const recent = await listRecentDrafts(5);
-    if (recent.length === 0) {
-      await ctx.reply("No drafts yet.");
-      return;
-    }
-    const lines = recent.map((draft) => {
-      const when = draft.createdAt.toISOString().slice(0, 16).replace("T", " ");
-      return `• ${when} — <b>${escapeHtml(draft.topicTitle)}</b> (${draft.status})`;
-    });
-    await ctx.reply(lines.join("\n"), { parse_mode: "HTML" });
+    await ctx.reply(await buildRecentMessage(), { parse_mode: "HTML" });
   });
 
   bot.command("model", async (ctx) => {
@@ -168,168 +123,41 @@ export function registerHandlers(): void {
 
   bot.command("auth", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-    const { url } = buildAuthorizationUrl();
-    await ctx.reply(
-      [
-        "Open this link and approve access for the LinkedIn profile that should be posting:",
-        "",
-        url,
-        "",
-        "The link is valid for 15 minutes.",
-      ].join("\n"),
-      { link_preview_options: { is_disabled: true } },
-    );
+    const { text } = runAuth();
+    await ctx.reply(text, { link_preview_options: { is_disabled: true } });
   });
 
   bot.command("whoami", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-    const account = await getConnectedAccount();
-    if (!account) {
-      await ctx.reply("No LinkedIn account connected. Run /auth.");
-      return;
-    }
-    await ctx.reply(
-      `Connected as <code>${escapeHtml(account.memberUrn)}</code>\nToken valid until ${account.expiresAt.toISOString()}`,
-      { parse_mode: "HTML" },
-    );
+    await ctx.reply(await buildWhoamiMessage(), { parse_mode: "HTML" });
   });
 
   bot.command("deauth", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-    const released = await disconnectLinkedIn();
-    if (!released) {
-      await ctx.reply("No LinkedIn account is connected, so there is nothing to release.");
-      return;
-    }
-    await ctx.reply(
-      [
-        `Released <code>${escapeHtml(released.memberUrn)}</code>.`,
-        released.revoked
-          ? "The token is revoked at LinkedIn and deleted here."
-          : [
-              "The token is deleted here, but LinkedIn would not revoke it.",
-              "Remove the app under LinkedIn → Settings → Data privacy → Permitted services",
-              "to be sure.",
-            ].join(" "),
-        "",
-        "Nothing can be published until you run /auth again.",
-      ].join("\n"),
-      { parse_mode: "HTML" },
-    );
+    await ctx.reply(await buildDeauthMessage(), { parse_mode: "HTML" });
   });
 
   bot.command("retry", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-    const recent = await listRecentDrafts(10);
-    const failed = recent.find((draft) => draft.status === "failed");
-    if (!failed) {
-      await ctx.reply("No failed draft to retry.");
-      return;
-    }
-    await ctx.reply(`Retrying: ${failed.topicTitle}`);
-    detach("Retry publish", retryPublish(failed.id));
+    await ctx.reply(await runRetry(), { parse_mode: "HTML" });
   });
 
   bot.command("usage", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-    const [summary, activeModel] = await Promise.all([
-      summariseUsage(startOfDayIn(env.TIMEZONE)),
-      getActiveGeminiModel(),
-    ]);
-
-    if (summary.allTime.calls === 0) {
-      await ctx.reply("No Gemini calls recorded yet. Run /topics to make one.");
-      return;
-    }
-
-    const n = (value: number) => value.toLocaleString("en-US");
-    const line = (name: string, w: typeof summary.today) =>
-      `${name}: <b>${n(w.calls)}</b> call${w.calls === 1 ? "" : "s"}, ${n(w.totalTokens)} tokens` +
-      (w.failed > 0 ? ` (${n(w.failed)} failed)` : "");
-
-    const lines = [
-      "<b>Gemini usage</b>",
-      `Model: <code>${escapeHtml(activeModel ?? env.GEMINI_MODEL)}</code>` +
-        (activeModel ? " (switched via /model)" : "") +
-        " · free tier, no billing",
-      "",
-      line("Last hour", summary.lastHour),
-      line(`Today (${escapeHtml(env.TIMEZONE)})`, summary.today),
-      line("Last 7 days", summary.last7Days),
-      line("All time", summary.allTime),
-    ];
-
-    if (summary.byLabel.length > 0) {
-      lines.push("", "<b>By step, last 7 days</b>");
-      for (const row of summary.byLabel) {
-        lines.push(
-          `• <code>${escapeHtml(row.label)}</code> — ${n(row.calls)} × ` +
-            `${n(row.promptTokens)} in / ${n(row.outputTokens)} out`,
-        );
-      }
-    }
-
-    if (summary.since) {
-      lines.push("", `<i>Counting since ${summary.since.toISOString().slice(0, 16).replace("T", " ")} UTC</i>`);
-    }
-
-    await ctx.reply(lines.join("\n"), { parse_mode: "HTML" });
+    await ctx.reply(await buildUsageMessage(), { parse_mode: "HTML" });
   });
 
   bot.command("test", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-
     // The probes take a couple of seconds; say something first so it doesn't look dead.
     const placeholder = await ctx.reply("Checking…");
-    const report = await runHealthChecks();
-
-    const n = (value: number) => value.toLocaleString("en-US");
-    const HEADLINE = {
-      ok: "🟢 <b>All systems go</b>",
-      warn: "🟡 <b>Up, with warnings</b>",
-      down: "🔴 <b>Something is down</b>",
-    } as const;
-    const ICON = { ok: "✅", warn: "⚠️", down: "❌" } as const;
-
-    const checkLine = (check: Check) =>
-      `${ICON[check.status]} <b>${escapeHtml(check.name)}</b> — ${escapeHtml(check.detail)}` +
-      (check.ms === undefined ? "" : ` <i>(${n(check.ms)} ms)</i>`);
-
-    const lines = [
-      HEADLINE[report.status],
-      `Up ${formatDuration(report.uptimeMs)} · ${escapeHtml(process.version)} · ${escapeHtml(env.NODE_ENV)}`,
-      "",
-      ...report.checks.map(checkLine),
-    ];
-
-    if (report.quota.models.length > 0) {
-      lines.push("", "<b>Gemini quota left</b>");
-      for (const model of report.quota.models) {
-        const perDayLeft = Math.max(0, model.perDay - model.usedToday);
-        const perMinuteLeft = Math.max(0, model.perMinute - model.usedThisMinute);
-        const mark = perDayLeft === 0 ? "⚠️ " : "";
-        lines.push(
-          `${mark}• <code>${escapeHtml(model.model)}</code>${model.role === "fallback" ? " <i>(fallback)</i>" : ""}\n` +
-            `  <b>${n(perDayLeft)}</b> of ${n(model.perDay)} requests left today · ` +
-            `<b>${n(perMinuteLeft)}</b> of ${n(model.perMinute)} left this minute`,
-        );
-      }
-      lines.push(
-        `<i>Resets in ${formatDuration(report.quota.resetsInMs)} (midnight ${escapeHtml(report.quota.timeZone)}).</i>`,
-        "<i>Counted from calls this bot recorded against the limits in GEMINI_FREE_RPD/RPM — " +
-          "Google publishes no quota endpoint, so treat it as a floor, not a guarantee.</i>",
-      );
-    }
-
-    await ctx.api.editMessageText(ctx.chat.id, placeholder.message_id, lines.join("\n"), {
-      parse_mode: "HTML",
-    });
+    const text = await buildTestMessage();
+    await ctx.api.editMessageText(ctx.chat.id, placeholder.message_id, text, { parse_mode: "HTML" });
   });
 
   bot.command("cancel", async (ctx) => {
     if (!isApprover(ctx.chat.id)) return;
-    await clearConversationState(APPROVER_CHAT_ID);
-    await ctx.reply("Fine — I've stopped waiting for a reply.");
+    await ctx.reply(await runCancel());
   });
 
   /* ---------------------------------------------------------- callbacks */

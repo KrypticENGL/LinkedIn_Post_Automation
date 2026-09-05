@@ -5,17 +5,22 @@ import { ModelSelector } from "../components/ModelSelector";
 import { SlashMenu } from "../components/SlashMenu";
 import { SLASH_COMMANDS, type SlashCommand } from "../data/commands";
 import { useSpotlight } from "../hooks/useSpotlight";
-import { ApiError, createPost, setModel } from "../lib/api";
+import { ApiError, createPost, getModel, runCommand, setModel } from "../lib/api";
+import { openLink } from "../lib/telegram";
 import styles from "./NewPost.module.css";
 
 const NAV_KEYS = new Set(["ArrowUp", "ArrowDown", "Enter", "Escape", "Tab"]);
 
-const HELP_TEXT =
-  "Give it a topic or a rough angle — Sigmσid writes the post, generates an image, runs a safety check, " +
-  "and sends it to Telegram for your review. Nothing reaches LinkedIn without your confirmation there. " +
-  "/model <name> switches the Gemini model, /cancel clears this box.";
+/** Every command id that maps to a real backend action — see data/commands.ts. */
+const KNOWN_COMMANDS = new Set(SLASH_COMMANDS.map((c) => c.id));
 
-type Feedback = { tone: "success" | "error" | "info"; text: string };
+type Entry = { id: string; command: string; html: string; url?: string; tone: "success" | "error" | "info" };
+
+function parseCommand(text: string): { name: string; arg: string } | null {
+  const match = /^\/([a-zA-Z]+)(?:\s+(.*))?$/.exec(text.trim());
+  if (!match) return null;
+  return { name: match[1].toLowerCase(), arg: (match[2] ?? "").trim() };
+}
 
 export function NewPost() {
   const [value, setValue] = useState("");
@@ -23,7 +28,7 @@ export function NewPost() {
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [entries, setEntries] = useState<Entry[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { ref: cardRef, onPointerMove } = useSpotlight<HTMLDivElement>();
@@ -34,6 +39,11 @@ export function NewPost() {
   }, [query]);
 
   const activeIndex = Math.max(0, filtered.findIndex((c) => c.id === activeId));
+  const parsedCommand = parseCommand(value);
+
+  function pushEntry(entry: Omit<Entry, "id">) {
+    setEntries((prev) => [{ ...entry, id: crypto.randomUUID() }, ...prev].slice(0, 20));
+  }
 
   function syncSlashState(el: HTMLTextAreaElement) {
     const pos = el.selectionStart ?? el.value.length;
@@ -118,54 +128,102 @@ export function NewPost() {
     }
   }
 
-  async function handleSubmit() {
-    const text = value.trim();
-    if (!text || submitting) return;
-
-    if (/^\/cancel$/i.test(text)) {
-      clearComposer();
-      setFeedback(null);
-      return;
-    }
-
-    if (/^\/help$/i.test(text)) {
-      setFeedback({ tone: "info", text: HELP_TEXT });
-      return;
-    }
-
-    const modelMatch = /^\/model(?:\s+(.+))?$/i.exec(text);
-    if (modelMatch) {
-      const target = modelMatch[1]?.trim();
-      if (!target) {
-        setFeedback({ tone: "error", text: "Usage: /model <name> — e.g. /model gemini-3.7-pro" });
-        return;
-      }
-      setSubmitting(true);
-      setFeedback(null);
-      try {
-        const info = await setModel(target);
-        setFeedback({ tone: "success", text: `Switched to ${info.active ?? info.default}.` });
-        clearComposer();
-      } catch (err) {
-        setFeedback({ tone: "error", text: err instanceof ApiError ? err.message : "Could not switch model" });
-      } finally {
-        setSubmitting(false);
-      }
-      return;
-    }
-
+  async function runModelCommand(text: string, arg: string) {
     setSubmitting(true);
-    setFeedback(null);
     try {
-      await createPost(text);
-      setFeedback({ tone: "success", text: "Sent — check Telegram for the draft." });
-      clearComposer();
+      if (!arg) {
+        const info = await getModel();
+        const lines = [
+          `Using <code>${info.active ?? info.default}</code>` +
+            (info.active ? " — an override, not the env default." : " — the env default."),
+          `Fallback stays <code>${info.fallback}</code> either way.`,
+          "",
+          "To switch: <code>/model gemini-2.5-pro</code> (any model name Google's API accepts).",
+        ];
+        pushEntry({ command: text, html: lines.join("\n"), tone: "info" });
+      } else {
+        const info = await setModel(arg);
+        const html =
+          info.active === null
+            ? `Back to the default model: <code>${info.default}</code>`
+            : `Switched to <code>${info.active}</code>. Topics, posts, and moderation all use it now — ` +
+              `<code>/model default</code> to go back to <code>${info.default}</code>.`;
+        pushEntry({ command: text, html, tone: "success" });
+        clearComposer();
+      }
     } catch (err) {
-      setFeedback({ tone: "error", text: err instanceof ApiError ? err.message : "Could not start the draft" });
+      pushEntry({
+        command: text,
+        html: err instanceof ApiError ? err.message : "Could not reach the model endpoint",
+        tone: "error",
+      });
     } finally {
       setSubmitting(false);
     }
   }
+
+  async function runKnownCommand(text: string, name: string) {
+    setSubmitting(true);
+    try {
+      const reply = await runCommand(name);
+      pushEntry({
+        command: text,
+        html: reply.html,
+        url: reply.url,
+        tone: name === "topics" || name === "retry" ? "success" : "info",
+      });
+      if (name === "auth" && reply.url) openLink(reply.url);
+      clearComposer();
+    } catch (err) {
+      pushEntry({
+        command: text,
+        html: err instanceof ApiError ? err.message : `Could not run /${name}`,
+        tone: "error",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleSubmit() {
+    const text = value.trim();
+    if (!text || submitting) return;
+
+    const parsed = parseCommand(text);
+    if (parsed) {
+      if (parsed.name === "model") {
+        await runModelCommand(text, parsed.arg);
+        return;
+      }
+      if (KNOWN_COMMANDS.has(parsed.name)) {
+        await runKnownCommand(text, parsed.name);
+        return;
+      }
+      pushEntry({ command: text, html: `Unknown command: /${parsed.name}`, tone: "error" });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await createPost(text);
+      pushEntry({ command: text, html: "Sent — check Telegram for the draft.", tone: "success" });
+      clearComposer();
+    } catch (err) {
+      pushEntry({
+        command: text,
+        html: err instanceof ApiError ? err.message : "Could not start the draft",
+        tone: "error",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const submitLabel = submitting
+    ? "Working…"
+    : parsedCommand && KNOWN_COMMANDS.has(parsedCommand.name)
+      ? `Run /${parsedCommand.name}`
+      : "Draft post";
 
   return (
     <motion.div
@@ -235,7 +293,7 @@ export function NewPost() {
             disabled={value.trim().length === 0 || submitting}
             onClick={handleSubmit}
           >
-            {submitting ? "Sending…" : "Draft post"}
+            {submitLabel}
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path
                 d="M2 7H12M12 7L7.5 2.5M12 7L7.5 11.5"
@@ -249,20 +307,28 @@ export function NewPost() {
         </div>
       </div>
 
-      <AnimatePresence>
-        {feedback && (
-          <motion.div
-            key={feedback.text}
-            className={`${styles.feedback} ${styles[feedback.tone]}`}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.2 }}
-          >
-            {feedback.text}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className={styles.transcript}>
+        <AnimatePresence initial={false}>
+          {entries.map((entry) => (
+            <motion.div
+              key={entry.id}
+              className={`${styles.entry} ${styles[entry.tone]}`}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className={styles.entryCommand}>{entry.command}</div>
+              <div className={styles.entryBody} dangerouslySetInnerHTML={{ __html: entry.html }} />
+              {entry.url && (
+                <button type="button" className={styles.entryLink} onClick={() => openLink(entry.url!)}>
+                  Open LinkedIn
+                </button>
+              )}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
     </motion.div>
   );
 }

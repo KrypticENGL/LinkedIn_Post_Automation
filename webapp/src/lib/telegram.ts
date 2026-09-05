@@ -4,6 +4,7 @@ type TelegramWebApp = {
   ready: () => void;
   expand: () => void;
   colorScheme: "light" | "dark";
+  openLink: (url: string) => void;
 };
 
 declare global {
@@ -31,4 +32,15 @@ export function getInitData(): string {
 
 export function isInsideTelegram(): boolean {
   return getWebApp() !== null;
+}
+
+/** Opens an external URL — via Telegram's own link handler inside the Mini App shell,
+ *  falling back to a normal new tab everywhere else (e.g. local dev in a browser). */
+export function openLink(url: string): void {
+  const webApp = getWebApp();
+  if (webApp) {
+    webApp.openLink(url);
+  } else {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 }
