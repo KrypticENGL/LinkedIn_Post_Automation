@@ -252,7 +252,7 @@ export function NewPost() {
           <textarea
             ref={textareaRef}
             className={styles.textarea}
-            placeholder="e.g. why most B2B marketing teams still ship in silos… (type / for commands)"
+            placeholder="e.g. why most B2B marketing teams still ship in silos… (type / for tasks)"
             rows={1}
             value={value}
             disabled={submitting}
@@ -286,7 +286,7 @@ export function NewPost() {
             <ModelSelector />
             <button type="button" className={styles.commandsButton} onClick={openCommandPalette}>
               <span className={styles.slashIcon}>/</span>
-              Commands
+              Tasks
             </button>
           </div>
 
