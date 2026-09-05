@@ -46,3 +46,17 @@ export type ModelInfo = {
   default: string;
   fallback: string;
 };
+
+/**
+ * One command-and-reply pair in the New Post composer's transcript. Lifted to
+ * App.tsx (see ComposerState there) rather than living in NewPost's own state, so it
+ * survives switching to Previous Posts/Quota and back — React Router unmounts the
+ * page on every route change, which would otherwise wipe it.
+ */
+export type ComposerEntry = {
+  id: string;
+  command: string;
+  html: string;
+  url?: string;
+  tone: "success" | "error" | "info";
+};

@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { HexLoader } from "../components/HexLoader";
 import { ModelSelector } from "../components/ModelSelector";
 import { SlashMenu } from "../components/SlashMenu";
 import { SLASH_COMMANDS, type SlashCommand } from "../data/commands";
+import type { ComposerEntry } from "../data/types";
 import { useSpotlight } from "../hooks/useSpotlight";
 import { ApiError, createPost, getModel, runCommand, setModel } from "../lib/api";
 import { openLink } from "../lib/telegram";
@@ -15,21 +16,25 @@ const NAV_KEYS = new Set(["ArrowUp", "ArrowDown", "Enter", "Escape", "Tab"]);
 /** Every command id that maps to a real backend action — see data/commands.ts. */
 const KNOWN_COMMANDS = new Set(SLASH_COMMANDS.map((c) => c.id));
 
-type Entry = { id: string; command: string; html: string; url?: string; tone: "success" | "error" | "info" };
-
 function parseCommand(text: string): { name: string; arg: string } | null {
   const match = /^\/([a-zA-Z]+)(?:\s+(.*))?$/.exec(text.trim());
   if (!match) return null;
   return { name: match[1].toLowerCase(), arg: (match[2] ?? "").trim() };
 }
 
-export function NewPost() {
-  const [value, setValue] = useState("");
+type Props = {
+  /** Owned by App.tsx so it survives switching to Previous Posts/Quota and back. */
+  value: string;
+  onValueChange: (value: string) => void;
+  entries: ComposerEntry[];
+  onEntriesChange: (updater: (prev: ComposerEntry[]) => ComposerEntry[]) => void;
+};
+
+export function NewPost({ value, onValueChange, entries, onEntriesChange }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [entries, setEntries] = useState<Entry[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { ref: cardRef, onPointerMove } = useSpotlight<HTMLDivElement>();
@@ -42,8 +47,15 @@ export function NewPost() {
   const activeIndex = Math.max(0, filtered.findIndex((c) => c.id === activeId));
   const parsedCommand = parseCommand(value);
 
-  function pushEntry(entry: Omit<Entry, "id">) {
-    setEntries((prev) => [{ ...entry, id: crypto.randomUUID() }, ...prev].slice(0, 20));
+  // The composer remounts every time this route is revisited (React Router), but
+  // `value` may already hold restored text — size the textarea to it immediately
+  // instead of waiting for the next keystroke.
+  useEffect(() => {
+    if (textareaRef.current) resizeTextarea(textareaRef.current);
+  }, []);
+
+  function pushEntry(entry: Omit<ComposerEntry, "id">) {
+    onEntriesChange((prev) => [{ ...entry, id: crypto.randomUUID() }, ...prev].slice(0, 20));
   }
 
   function syncSlashState(el: HTMLTextAreaElement) {
@@ -65,7 +77,7 @@ export function NewPost() {
   }
 
   function clearComposer() {
-    setValue("");
+    onValueChange("");
     requestAnimationFrame(() => {
       if (textareaRef.current) resizeTextarea(textareaRef.current);
     });
@@ -79,7 +91,7 @@ export function NewPost() {
     const before = value.slice(0, Math.max(0, slashStart));
     const after = value.slice(pos);
     const next = `${before}${cmd.insert}${after}`;
-    setValue(next);
+    onValueChange(next);
     setMenuOpen(false);
     setActiveId(null);
     requestAnimationFrame(() => {
@@ -99,7 +111,7 @@ export function NewPost() {
     const after = value.slice(pos);
     const insert = before.length > 0 && !/\s$/.test(before) ? " /" : "/";
     const next = before + insert + after;
-    setValue(next);
+    onValueChange(next);
     requestAnimationFrame(() => {
       const caret = before.length + insert.length;
       el.selectionStart = el.selectionEnd = caret;
@@ -257,7 +269,7 @@ export function NewPost() {
             value={value}
             disabled={submitting}
             onChange={(e) => {
-              setValue(e.target.value);
+              onValueChange(e.target.value);
               syncSlashState(e.target);
               resizeTextarea(e.target);
             }}
