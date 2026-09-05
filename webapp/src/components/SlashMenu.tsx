@@ -47,7 +47,7 @@ export function SlashMenu({ commands, activeId, onSelect, onHover, onClose }: Pr
         transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
         role="listbox"
       >
-        {commands.length === 0 && <div className={styles.empty}>No matching commands</div>}
+        {commands.length === 0 && <div className={styles.empty}>No matching tasks</div>}
 
         {groups.map(({ group, items }) => (
           <div key={group} className={styles.group}>

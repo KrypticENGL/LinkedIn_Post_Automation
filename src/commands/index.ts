@@ -31,7 +31,7 @@ export const HELP_MESSAGE = [
   "",
   "Then: I write the post, generate an image, run both through a safety check, and send them here for approval. Nothing reaches LinkedIn without your explicit confirmation.",
   "",
-  "<b>Commands</b>",
+  "<b>Tasks</b>",
   "/topics — fetch today's hot topics now",
   "/test — is the backend live, and how much quota is left",
   "/status — what's in flight",
