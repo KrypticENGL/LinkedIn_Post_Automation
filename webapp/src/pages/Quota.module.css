@@ -9,6 +9,16 @@
   margin-bottom: 28px;
 }
 
+.loading {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.loadingError {
+  color: #ff8a8a;
+  font-size: 0.9rem;
+}
+
 .headerTop {
   display: flex;
   align-items: center;

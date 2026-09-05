@@ -12,17 +12,17 @@ export type DraftStatus =
   | "cancelled"
   | "failed";
 
+/** Matches GET /api/posts — no per-draft model, since the bot doesn't track one. */
 export type PostSummary = {
   id: string;
   title: string;
   snippet: string;
   status: DraftStatus;
-  model: string;
   revisionCount: number;
   createdAt: string;
 };
 
-/** Mirrors src/health.ts ModelQuota. */
+/** Mirrors src/health.ts ModelQuota, returned by GET /api/quota. */
 export type ModelQuota = {
   model: string;
   role: "primary" | "fallback";
@@ -32,9 +32,17 @@ export type ModelQuota = {
   perMinute: number;
 };
 
+/** Matches GET /api/quota. */
 export type QuotaReport = {
   status: "ok" | "warn" | "down";
   models: ModelQuota[];
   resetsInMs: number;
   timeZone: string;
+};
+
+/** Matches GET/POST /api/model. */
+export type ModelInfo = {
+  active: string | null;
+  default: string;
+  fallback: string;
 };

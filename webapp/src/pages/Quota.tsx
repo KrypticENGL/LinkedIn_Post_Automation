@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { MOCK_QUOTA } from "../data/mock";
+import type { QuotaReport } from "../data/types";
+import { ApiError, getQuota } from "../lib/api";
 import styles from "./Quota.module.css";
 
 function formatDuration(ms: number): string {
@@ -17,15 +18,56 @@ const STATUS_COPY = {
   down: { label: "Something is down", tone: "down" },
 } as const;
 
+type LoadState = "loading" | "ready" | "error";
+
 export function Quota() {
-  const [resetsIn, setResetsIn] = useState(MOCK_QUOTA.resetsInMs);
+  const [report, setReport] = useState<QuotaReport | null>(null);
+  const [resetsIn, setResetsIn] = useState(0);
+  const [state, setState] = useState<LoadState>("loading");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const id = setInterval(() => setResetsIn((ms) => Math.max(0, ms - 1000)), 1000);
-    return () => clearInterval(id);
+    let cancelled = false;
+    getQuota()
+      .then((data) => {
+        if (cancelled) return;
+        setReport(data);
+        setResetsIn(data.resetsInMs);
+        setState("ready");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof ApiError ? err.message : "Could not load quota");
+        setState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const statusCopy = STATUS_COPY[MOCK_QUOTA.status];
+  useEffect(() => {
+    if (state !== "ready") return;
+    const id = setInterval(() => setResetsIn((ms) => Math.max(0, ms - 1000)), 1000);
+    return () => clearInterval(id);
+  }, [state]);
+
+  if (state === "loading") {
+    return (
+      <div className={styles.page}>
+        <p className={styles.loading}>Loading…</p>
+      </div>
+    );
+  }
+
+  if (state === "error" || !report) {
+    return (
+      <div className={styles.page}>
+        <p className={styles.loadingError}>{error}</p>
+      </div>
+    );
+  }
+
+  const statusCopy = STATUS_COPY[report.status];
 
   return (
     <div className={styles.page}>
@@ -40,8 +82,10 @@ export function Quota() {
         </p>
       </div>
 
+      {report.models.length === 0 && <p className={styles.loading}>No Gemini calls recorded yet.</p>}
+
       <div className={styles.cards}>
-        {MOCK_QUOTA.models.map((m, i) => {
+        {report.models.map((m, i) => {
           const dayPct = Math.min(100, (m.usedToday / m.perDay) * 100);
           const minutePct = Math.min(100, (m.usedThisMinute / m.perMinute) * 100);
           const dayLeft = Math.max(0, m.perDay - m.usedToday);
@@ -98,9 +142,11 @@ export function Quota() {
         })}
       </div>
 
-      <div className={styles.footer}>
-        Resets in <b>{formatDuration(resetsIn)}</b> · midnight {MOCK_QUOTA.timeZone}
-      </div>
+      {report.models.length > 0 && (
+        <div className={styles.footer}>
+          Resets in <b>{formatDuration(resetsIn)}</b> · midnight {report.timeZone}
+        </div>
+      )}
     </div>
   );
 }

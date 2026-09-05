@@ -1,6 +1,8 @@
 import { motion, type Variants } from "framer-motion";
+import { useEffect, useState } from "react";
 import { StatusBadge } from "../components/StatusBadge";
-import { MOCK_POSTS } from "../data/mock";
+import type { PostSummary } from "../data/types";
+import { ApiError, listPosts } from "../lib/api";
 import styles from "./PreviousPosts.module.css";
 
 const container: Variants = {
@@ -22,7 +24,31 @@ function formatDate(iso: string): string {
   });
 }
 
+type LoadState = "loading" | "ready" | "error";
+
 export function PreviousPosts() {
+  const [posts, setPosts] = useState<PostSummary[]>([]);
+  const [state, setState] = useState<LoadState>("loading");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listPosts(20)
+      .then((data) => {
+        if (cancelled) return;
+        setPosts(data.posts);
+        setState("ready");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof ApiError ? err.message : "Could not load previous posts");
+        setState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -30,17 +56,21 @@ export function PreviousPosts() {
         <p className={styles.subtitle}>Every draft Sigmσid has written, and where it ended up.</p>
       </div>
 
+      {state === "loading" && <p className={styles.status}>Loading…</p>}
+      {state === "error" && <p className={styles.statusError}>{error}</p>}
+      {state === "ready" && posts.length === 0 && (
+        <p className={styles.status}>No drafts yet — start one from New post.</p>
+      )}
+
       <motion.div className={styles.list} variants={container} initial="hidden" animate="show">
-        {MOCK_POSTS.map((post) => (
+        {posts.map((post) => (
           <motion.article key={post.id} className={styles.card} variants={item}>
             <div className={styles.cardTop}>
               <h2 className={styles.cardTitle}>{post.title}</h2>
               <StatusBadge status={post.status} />
             </div>
-            <p className={styles.snippet}>{post.snippet}</p>
+            {post.snippet && <p className={styles.snippet}>{post.snippet}</p>}
             <div className={styles.meta}>
-              <span className={styles.metaModel}>{post.model}</span>
-              <span className={styles.dotSep} />
               <span>
                 {post.revisionCount} revision{post.revisionCount === 1 ? "" : "s"}
               </span>

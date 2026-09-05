@@ -1,11 +1,17 @@
+import { useEffect } from "react";
 import { Route, Routes } from "react-router-dom";
 import { BackgroundFX } from "./components/BackgroundFX";
 import { Navbar } from "./components/Navbar";
+import { initTelegramWebApp } from "./lib/telegram";
 import { NewPost } from "./pages/NewPost";
 import { PreviousPosts } from "./pages/PreviousPosts";
 import { Quota } from "./pages/Quota";
 
 export default function App() {
+  useEffect(() => {
+    initTelegramWebApp();
+  }, []);
+
   return (
     <>
       <BackgroundFX />

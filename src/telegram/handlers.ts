@@ -17,7 +17,7 @@ import {
 } from "../db/repo.js";
 import type { RevisionScope, TopicCandidate } from "../db/schema.js";
 import { runHealthChecks, type Check } from "../health.js";
-import { errorMessage, logger } from "../logger.js";
+import { errorMessage } from "../logger.js";
 import { buildAuthorizationUrl, disconnectLinkedIn, getConnectedAccount } from "../linkedin/oauth.js";
 import { proposeTopics } from "../pipeline/dailyRun.js";
 import {
@@ -30,28 +30,13 @@ import { formatDuration, startOfDayIn } from "../time.js";
 import { APPROVER_CHAT_ID, bot, isApprover } from "./bot.js";
 import { DRAFT_ACTIONS, modelResetKeyboard, parseCallback } from "./keyboards.js";
 import {
+  detach,
   escapeHtml,
   notify,
   showConfirmKeyboard,
   showRejectKeyboard,
   showReviewKeyboard,
 } from "./notify.js";
-
-/**
- * Telegram expects a callback answered within seconds, but a generation round
- * takes a minute or more. Heavy work is therefore detached from the handler and
- * reports its own failures.
- */
-function detach(label: string, work: Promise<unknown>): void {
-  void work.catch(async (error) => {
-    logger.error({ label, err: errorMessage(error) }, "Background task failed");
-    try {
-      await notify(`❗️ ${escapeHtml(label)} failed.\n<code>${escapeHtml(errorMessage(error))}</code>`);
-    } catch {
-      // Telegram itself is down; the log line above is the record.
-    }
-  });
-}
 
 const HELP = [
   "<b>LinkedIn post automation</b>",

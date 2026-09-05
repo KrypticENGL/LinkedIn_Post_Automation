@@ -59,6 +59,18 @@ async function main(): Promise<void> {
       secret_token: WEBHOOK_SECRET,
       allowed_updates: ["message", "callback_query"],
     });
+
+    // Telegram Web Apps require https, which webhook mode already guarantees — so the
+    // Mini App menu button only makes sense here, never for local polling. A failure
+    // here (e.g. the webapp hasn't been built/deployed yet) shouldn't block startup.
+    try {
+      await bot.api.setChatMenuButton({
+        menu_button: { type: "web_app", text: "Sigmσid", web_app: { url: env.PUBLIC_BASE_URL } },
+      });
+    } catch (error) {
+      logger.warn({ err: errorMessage(error) }, "Could not set the Mini App menu button");
+    }
+
     logger.info(
       { username: bot.botInfo.username, client: clientProfile.clientName, url: webhookUrl() },
       "Telegram bot online (webhook)",

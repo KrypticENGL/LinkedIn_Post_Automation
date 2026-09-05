@@ -22,6 +22,22 @@ export async function notify(text: string): Promise<void> {
   await bot.api.sendMessage(CHAT, text, { parse_mode: "HTML" });
 }
 
+/**
+ * Telegram (and the web app's HTTP handlers) expect a reply within seconds, but a
+ * generation round takes a minute or more. Heavy work is therefore detached from
+ * the caller and reports its own failures.
+ */
+export function detach(label: string, work: Promise<unknown>): void {
+  void work.catch(async (error) => {
+    logger.error({ label, err: errorMessage(error) }, "Background task failed");
+    try {
+      await notify(`❗️ ${escapeHtml(label)} failed.\n<code>${escapeHtml(errorMessage(error))}</code>`);
+    } catch {
+      // Telegram itself is down; the log line above is the record.
+    }
+  });
+}
+
 /* ------------------------------------------------------------------ topics */
 
 export async function sendTopicOptions(batch: TopicBatch): Promise<void> {

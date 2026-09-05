@@ -5,16 +5,25 @@ import { ModelSelector } from "../components/ModelSelector";
 import { SlashMenu } from "../components/SlashMenu";
 import { SLASH_COMMANDS, type SlashCommand } from "../data/commands";
 import { useSpotlight } from "../hooks/useSpotlight";
+import { ApiError, createPost, setModel } from "../lib/api";
 import styles from "./NewPost.module.css";
 
 const NAV_KEYS = new Set(["ArrowUp", "ArrowDown", "Enter", "Escape", "Tab"]);
 
+const HELP_TEXT =
+  "Give it a topic or a rough angle — Sigmσid writes the post, generates an image, runs a safety check, " +
+  "and sends it to Telegram for your review. Nothing reaches LinkedIn without your confirmation there. " +
+  "/model <name> switches the Gemini model, /cancel clears this box.";
+
+type Feedback = { tone: "success" | "error" | "info"; text: string };
+
 export function NewPost() {
   const [value, setValue] = useState("");
-  const [model, setModel] = useState("gemini-3.7-flash");
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { ref: cardRef, onPointerMove } = useSpotlight<HTMLDivElement>();
@@ -42,6 +51,13 @@ export function NewPost() {
   function resizeTextarea(el: HTMLTextAreaElement) {
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 360)}px`;
+  }
+
+  function clearComposer() {
+    setValue("");
+    requestAnimationFrame(() => {
+      if (textareaRef.current) resizeTextarea(textareaRef.current);
+    });
   }
 
   function selectCommand(cmd: SlashCommand) {
@@ -102,6 +118,55 @@ export function NewPost() {
     }
   }
 
+  async function handleSubmit() {
+    const text = value.trim();
+    if (!text || submitting) return;
+
+    if (/^\/cancel$/i.test(text)) {
+      clearComposer();
+      setFeedback(null);
+      return;
+    }
+
+    if (/^\/help$/i.test(text)) {
+      setFeedback({ tone: "info", text: HELP_TEXT });
+      return;
+    }
+
+    const modelMatch = /^\/model(?:\s+(.+))?$/i.exec(text);
+    if (modelMatch) {
+      const target = modelMatch[1]?.trim();
+      if (!target) {
+        setFeedback({ tone: "error", text: "Usage: /model <name> — e.g. /model gemini-3.7-pro" });
+        return;
+      }
+      setSubmitting(true);
+      setFeedback(null);
+      try {
+        const info = await setModel(target);
+        setFeedback({ tone: "success", text: `Switched to ${info.active ?? info.default}.` });
+        clearComposer();
+      } catch (err) {
+        setFeedback({ tone: "error", text: err instanceof ApiError ? err.message : "Could not switch model" });
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    setSubmitting(true);
+    setFeedback(null);
+    try {
+      await createPost(text);
+      setFeedback({ tone: "success", text: "Sent — check Telegram for the draft." });
+      clearComposer();
+    } catch (err) {
+      setFeedback({ tone: "error", text: err instanceof ApiError ? err.message : "Could not start the draft" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <motion.div
       className={styles.page}
@@ -129,6 +194,7 @@ export function NewPost() {
             placeholder="e.g. why most B2B marketing teams still ship in silos… (type / for commands)"
             rows={1}
             value={value}
+            disabled={submitting}
             onChange={(e) => {
               setValue(e.target.value);
               syncSlashState(e.target);
@@ -156,15 +222,20 @@ export function NewPost() {
 
         <div className={styles.toolbar}>
           <div className={styles.toolbarLeft}>
-            <ModelSelector value={model} onChange={setModel} />
+            <ModelSelector />
             <button type="button" className={styles.commandsButton} onClick={openCommandPalette}>
               <span className={styles.slashIcon}>/</span>
               Commands
             </button>
           </div>
 
-          <button type="button" className={styles.submit} disabled={value.trim().length === 0}>
-            Draft post
+          <button
+            type="button"
+            className={styles.submit}
+            disabled={value.trim().length === 0 || submitting}
+            onClick={handleSubmit}
+          >
+            {submitting ? "Sending…" : "Draft post"}
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path
                 d="M2 7H12M12 7L7.5 2.5M12 7L7.5 11.5"
@@ -177,6 +248,21 @@ export function NewPost() {
           </button>
         </div>
       </div>
+
+      <AnimatePresence>
+        {feedback && (
+          <motion.div
+            key={feedback.text}
+            className={`${styles.feedback} ${styles[feedback.tone]}`}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2 }}
+          >
+            {feedback.text}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

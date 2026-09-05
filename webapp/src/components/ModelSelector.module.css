@@ -95,3 +95,29 @@
   font-size: 0.72rem;
   color: var(--text-faint);
 }
+
+.customForm {
+  padding: 4px 10px;
+}
+
+.customInput {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+.customInput:focus {
+  outline: none;
+  border-color: var(--accent-line);
+}
+
+.errorRow {
+  padding: 8px 10px 4px;
+  font-size: 0.76rem;
+  color: #ff8a8a;
+}

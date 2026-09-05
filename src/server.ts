@@ -1,11 +1,17 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import express from "express";
 import { webhookCallback } from "grammy";
 import { env, telegramMode } from "./config/env.js";
 import { consumeState, exchangeCodeForTokens } from "./linkedin/oauth.js";
 import { errorMessage, logger } from "./logger.js";
+import { miniAppRouter } from "./miniapp/router.js";
 import { bot } from "./telegram/bot.js";
 import { notify } from "./telegram/notify.js";
 import { WEBHOOK_PATH, WEBHOOK_SECRET } from "./telegram/webhook.js";
+
+/** Built by `npm run build` (see package.json) — absent until the webapp has been built. */
+const WEBAPP_DIST = path.join(process.cwd(), "webapp", "dist");
 
 function page(title: string, body: string): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
@@ -77,6 +83,21 @@ export function createServer() {
       res.status(500).send(page("Could not connect", `<p><code>${reason}</code></p>`));
     }
   });
+
+  app.use("/api", miniAppRouter);
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ error: "Not found" });
+  });
+
+  // The Mini App frontend (webapp/) — a Telegram Web App shown via the bot's menu
+  // button. Built separately (npm run build --prefix webapp) and served as static
+  // files with a catch-all so React Router's client-side routes resolve.
+  if (existsSync(path.join(WEBAPP_DIST, "index.html"))) {
+    app.use(express.static(WEBAPP_DIST));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(WEBAPP_DIST, "index.html"));
+    });
+  }
 
   app.use((_req, res) => {
     res.status(404).send(page("Not found", "<p>Nothing here.</p>"));
