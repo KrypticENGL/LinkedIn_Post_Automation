@@ -1,4 +1,4 @@
-import type { ActivityEvent, ModelInfo, PostSummary, QuotaReport } from "../data/types";
+import type { ActivityEvent, LatestDraft, ModelInfo, PostSummary, QuotaReport } from "../data/types";
 import { getInitData } from "./telegram";
 
 export class ApiError extends Error {}
@@ -26,6 +26,13 @@ export const listPosts = (limit = 10) => request<{ posts: PostSummary[] }>(`/pos
 
 export const createPost = (topic: string) =>
   request<{ ok: true }>("/posts", { method: "POST", body: JSON.stringify({ topic }) });
+
+/** Full text of the most recent draft — 404s (thrown as ApiError) when there is none. */
+export const getLatestDraft = () => request<LatestDraft>("/posts/latest");
+
+/** Sends finished post text straight into the review/publish loop — no AI writing pass. */
+export const sendComposedPost = (postText: string) =>
+  request<{ ok: true }>("/posts/from-text", { method: "POST", body: JSON.stringify({ postText }) });
 
 export const getQuota = () => request<QuotaReport>("/quota");
 

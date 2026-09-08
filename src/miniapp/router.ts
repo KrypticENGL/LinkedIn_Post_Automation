@@ -16,12 +16,17 @@ import {
   runTopics,
 } from "../commands/index.js";
 import type { Draft, TopicCandidate } from "../db/schema.js";
-import { getActiveGeminiModel, listRecentDrafts, setActiveGeminiModel } from "../db/repo.js";
+import {
+  getActiveGeminiModel,
+  latestDraftWithText,
+  listRecentDrafts,
+  setActiveGeminiModel,
+} from "../db/repo.js";
 import { runHealthChecks } from "../health.js";
 import { errorMessage } from "../logger.js";
 import { activitySince } from "./activity.js";
 import { detach } from "../telegram/notify.js";
-import { startDraftFromTopic } from "../pipeline/draftPipeline.js";
+import { startDraftFromText, startDraftFromTopic } from "../pipeline/draftPipeline.js";
 import { requireApprover } from "./auth.js";
 
 export const miniAppRouter = Router();
@@ -98,6 +103,23 @@ miniAppRouter.get("/posts", async (req, res) => {
   res.json({ posts: drafts.map(toPostSummary) });
 });
 
+/** Full text of the most recent draft — the web app's preview editor loads this so
+ *  the reviewer can tweak what the pipeline generated before sending it on. */
+miniAppRouter.get("/posts/latest", async (_req, res) => {
+  const draft = await latestDraftWithText();
+  if (!draft) {
+    res.status(404).json({ error: "No drafts with text yet" });
+    return;
+  }
+  res.json({
+    id: draft.id,
+    title: draft.topicTitle,
+    postText: draft.postText ?? "",
+    status: draft.status,
+    createdAt: draft.createdAt.toISOString(),
+  });
+});
+
 const newPostBody = z.object({ topic: z.string().trim().min(1).max(4000) });
 
 miniAppRouter.post("/posts", async (req, res) => {
@@ -121,6 +143,26 @@ miniAppRouter.post("/posts", async (req, res) => {
   // rest of the review loop, same as every other entry point into the pipeline.
   res.status(202).json({ ok: true });
   detach("Web app draft", startDraftFromTopic(topic, null));
+});
+
+// LinkedIn's hard limit is 3000; the pipeline trims to MAX_POST_CHARS itself.
+const fromTextBody = z.object({ postText: z.string().trim().min(1).max(3000) });
+
+/**
+ * The preview editor's "Send through automation" button. Unlike POST /posts, this
+ * takes the finished post text as-is — no topic, no AI writing pass — runs the
+ * safety gate, and drops it straight into the Telegram approve/confirm/publish loop.
+ */
+miniAppRouter.post("/posts/from-text", async (req, res) => {
+  const parsed = fromTextBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "postText is required" });
+    return;
+  }
+
+  // Moderation is a model round-trip; answer now, review in Telegram.
+  res.status(202).json({ ok: true });
+  detach("Web app preview post", startDraftFromText(parsed.data.postText));
 });
 
 /* ------------------------------------------------------------------ activity */

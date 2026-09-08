@@ -62,6 +62,16 @@ export type ComposerEntry = {
   tone: "success" | "error" | "info";
 };
 
+/** Matches GET /api/posts/latest — the full text of the most recent draft, for the
+ *  preview editor to load and tweak. */
+export type LatestDraft = {
+  id: string;
+  title: string;
+  postText: string;
+  status: DraftStatus;
+  createdAt: string;
+};
+
 /** Matches GET /api/activity — bot→approver messages, newest last. */
 export type ActivityEvent = {
   id: number;
