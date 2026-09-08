@@ -14,6 +14,12 @@
   width: min(560px, 100%);
   max-height: min(60vh, 480px);
   overflow-y: auto;
+  /* Keep wheel/trackpad scroll from chaining to <body>, which sits behind the
+     backdrop blur + animated BackgroundFX and repaints expensively. */
+  overscroll-behavior: contain;
+  /* Own compositor layer, so scrolling the list doesn't re-rasterise the
+     full-viewport backdrop-filter on .backdrop every frame. */
+  transform: translateZ(0);
   background: #131317;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
@@ -40,6 +46,7 @@
   align-items: baseline;
   gap: 12px;
   padding: 11px 12px;
+  border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   text-align: left;

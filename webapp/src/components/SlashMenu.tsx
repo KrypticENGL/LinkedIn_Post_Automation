@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useRef } from "react";
 import { createPortal } from "react-dom";
 import type { SlashCommand } from "../data/commands";
 import styles from "./SlashMenu.module.css";
@@ -28,6 +29,16 @@ export function SlashMenu({ commands, activeId, onSelect, onHover, onClose }: Pr
     .map((group) => ({ group, items: commands.filter((c) => c.group === group) }))
     .filter((g) => g.items.length > 0);
 
+  // Scrolling the list moves items under a stationary cursor, firing a burst of
+  // mouseenter events — each one an onHover -> parent setState -> re-render. Ignore
+  // hover updates for a beat after any scroll so the wheel stays smooth.
+  const scrolledAt = useRef(0);
+  const handleHover = (id: string) => {
+    if (id === activeId) return;
+    if (performance.now() - scrolledAt.current < 120) return;
+    onHover(id);
+  };
+
   return createPortal(
     <motion.div
       className={styles.backdrop}
@@ -46,6 +57,9 @@ export function SlashMenu({ commands, activeId, onSelect, onHover, onClose }: Pr
         exit={{ opacity: 0, y: 12, scale: 0.97 }}
         transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
         role="listbox"
+        onScroll={() => {
+          scrolledAt.current = performance.now();
+        }}
       >
         {commands.length === 0 && <div className={styles.empty}>No matching tasks</div>}
 
@@ -59,7 +73,7 @@ export function SlashMenu({ commands, activeId, onSelect, onHover, onClose }: Pr
                 role="option"
                 aria-selected={cmd.id === activeId}
                 className={`${styles.item} ${cmd.id === activeId ? styles.itemActive : ""}`}
-                onMouseEnter={() => onHover(cmd.id)}
+                onMouseEnter={() => handleHover(cmd.id)}
                 onMouseDown={(e) => {
                   // Prevent the textarea from losing focus before onSelect runs.
                   e.preventDefault();
