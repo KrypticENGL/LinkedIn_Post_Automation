@@ -71,6 +71,7 @@
   align-items: flex-start;
   gap: 1px;
   padding: 8px 10px;
+  border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   text-align: left;
