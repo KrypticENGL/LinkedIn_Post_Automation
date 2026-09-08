@@ -29,10 +29,15 @@ import { activitySince } from "./activity.js";
 import { detach } from "../telegram/notify.js";
 import { startDraftFromText, startDraftFromTopic } from "../pipeline/draftPipeline.js";
 import { requireApprover } from "./auth.js";
+import { reviewRouter } from "./review.js";
 
 export const miniAppRouter = Router();
 
 miniAppRouter.use(requireApprover);
+
+// Pick-a-topic + approve / reject / confirm / cancel — the Telegram review loop,
+// as JSON. Behind requireApprover like everything else here.
+miniAppRouter.use(reviewRouter);
 
 /* ------------------------------------------------------------------ model */
 

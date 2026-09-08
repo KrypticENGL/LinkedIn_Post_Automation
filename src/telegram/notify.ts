@@ -71,6 +71,17 @@ export async function sendTopicOptions(batch: TopicBatch): Promise<void> {
   await setTopicBatchMessageId(batch.id, message.message_id);
 }
 
+/** Strips the pick-a-topic buttons from a batch's Telegram message — used when the
+ *  topic was chosen from the web app instead of by tapping there. */
+export async function clearTopicButtons(batch: TopicBatch): Promise<void> {
+  if (!batch.telegramMessageId) return;
+  try {
+    await bot.api.editMessageReplyMarkup(CHAT, batch.telegramMessageId, { reply_markup: undefined });
+  } catch {
+    // Too old to edit, or already cleared; the batch's "used" status guards stale taps anyway.
+  }
+}
+
 /* ------------------------------------------------------------------ drafts */
 
 function reviewBody(draft: Draft, moderation: ModerationReport | null): string {

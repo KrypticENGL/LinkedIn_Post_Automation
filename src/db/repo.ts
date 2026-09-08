@@ -41,6 +41,19 @@ export async function markTopicBatchUsed(id: string): Promise<void> {
   await db.update(topicBatches).set({ status: "used" }).where(eq(topicBatches.id, id));
 }
 
+/** The batch whose buttons are currently live — what the web app's review page
+ *  offers as pick-a-topic buttons. At most one is "open" at a time (see
+ *  {@link createTopicBatch}). */
+export async function latestOpenTopicBatch(): Promise<TopicBatch | null> {
+  const rows = await db
+    .select()
+    .from(topicBatches)
+    .where(eq(topicBatches.status, "open"))
+    .orderBy(desc(topicBatches.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 /* ------------------------------------------------------------------ drafts */
 
 export async function createDraft(input: {
@@ -120,6 +133,30 @@ export async function listActiveDrafts(): Promise<Draft[]> {
     .where(inArray(drafts.status, ACTIVE_STATUSES))
     .orderBy(desc(drafts.createdAt))
     .limit(10);
+}
+
+/** Statuses the web app's review page has something to show for — an in-flight
+ *  draft, one waiting on the reviewer, or a blocked one to fix or discard. */
+const REVIEWABLE_STATUSES: DraftStatus[] = [
+  "generating",
+  "moderating",
+  "moderation_blocked",
+  "pending_review",
+  "awaiting_confirmation",
+  "awaiting_feedback",
+  "publishing",
+];
+
+/** The single draft the review page is currently about — the most recently
+ *  touched one that still needs eyes. Null when nothing is in flight. */
+export async function latestReviewableDraft(): Promise<Draft | null> {
+  const rows = await db
+    .select()
+    .from(drafts)
+    .where(inArray(drafts.status, REVIEWABLE_STATUSES))
+    .orderBy(desc(drafts.updatedAt))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 export async function listRecentDrafts(limit = 5): Promise<Draft[]> {
