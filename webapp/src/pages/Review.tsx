@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AuthedImage } from "../components/AuthedImage";
 import { HexLoader } from "../components/HexLoader";
 import { StatusBadge } from "../components/StatusBadge";
@@ -14,7 +15,6 @@ import {
   ApiError,
   approveDraft,
   cancelDraft,
-  confirmDraft,
   getActivity,
   getReview,
   pickTopic,
@@ -127,6 +127,7 @@ function useAction(onChanged: () => Promise<void>) {
 /* --------------------------------------------------------------- draft card */
 
 function DraftCard({ draft, onChanged }: { draft: ReviewDraft; onChanged: () => Promise<void> }) {
+  const navigate = useNavigate();
   const { busy, error, run } = useAction(onChanged);
   // Keyed on id:revision:status by the parent, so this state starts fresh each round.
   const [reviseOpen, setReviseOpen] = useState(false);
@@ -251,9 +252,9 @@ function DraftCard({ draft, onChanged }: { draft: ReviewDraft; onChanged: () => 
           <button
             className={styles.primary}
             disabled={busy !== null}
-            onClick={() => void run("confirm", () => confirmDraft(draft.id))}
+            onClick={() => navigate(`/editor?draft=${draft.id}`)}
           >
-            {busy === "confirm" ? "Publishing…" : "Post it now"}
+            Edit &amp; publish
           </button>
           <button
             className={styles.secondary}

@@ -1,5 +1,6 @@
 import type {
   ActivityEvent,
+  DraftStatus,
   LatestDraft,
   ModelInfo,
   PostSummary,
@@ -99,6 +100,28 @@ export const reviseDraft = (id: string, scope: RevisionScope, feedback: string) 
 
 export const cancelDraft = (id: string) =>
   request<{ draft: ReviewDraft }>(`/drafts/${id}/cancel`, { method: "POST" });
+
+export type DraftText = {
+  id: string;
+  title: string;
+  postText: string;
+  status: DraftStatus;
+  hasImage: boolean;
+};
+
+/** One draft's text and state — the Post editor loads this when opened with ?draft. */
+export const getDraftById = (id: string) => request<DraftText>(`/drafts/${id}`);
+
+/**
+ * Publish an approved draft with hand-edited text. Re-runs the text safety gate:
+ * `{ published: true }` (202) means it's on its way to LinkedIn; `{ published:
+ * false, reason }` (200) means the edit was blocked and nothing went out.
+ */
+export const publishEditedDraft = (id: string, postText: string) =>
+  request<{ published: boolean; reason?: string }>(`/drafts/${id}/publish`, {
+    method: "POST",
+    body: JSON.stringify({ postText }),
+  });
 
 /**
  * Fetches a draft image (auth header and all) and hands back an object URL.

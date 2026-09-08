@@ -1,9 +1,16 @@
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { HexLoader } from "../components/HexLoader";
 import { LinkedInPreview } from "../components/LinkedInPreview";
 import { useSpotlight } from "../hooks/useSpotlight";
-import { ApiError, getLatestDraft, sendComposedPost } from "../lib/api";
+import {
+  ApiError,
+  getDraftById,
+  getLatestDraft,
+  publishEditedDraft,
+  sendComposedPost,
+} from "../lib/api";
 import {
   type BlockStyle,
   type InlineStyle,
@@ -33,7 +40,7 @@ const TOOLS: Tool[] = [
   { kind: "clear", label: "Clear", title: "Clear formatting" },
 ];
 
-type SendState = "idle" | "sending" | "sent" | "error";
+type SendState = "idle" | "sending" | "sent" | "error" | "publishing" | "blocked";
 
 function readStored(): string {
   try {
@@ -44,8 +51,15 @@ function readStored(): string {
 }
 
 export function PostEditor() {
-  const [text, setText] = useState(readStored);
-  const [loading, setLoading] = useState(false);
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  // Opened from the Review tab's "Edit & publish" — this specific draft's text is
+  // loaded from the server and the button publishes it straight to LinkedIn.
+  const draftId = params.get("draft");
+
+  const [text, setText] = useState(() => (draftId ? "" : readStored()));
+  const [linkedTitle, setLinkedTitle] = useState<string | null>(null);
+  const [loading, setLoading] = useState(() => Boolean(draftId));
   const [notice, setNotice] = useState<string | null>(null);
   const [sendState, setSendState] = useState<SendState>("idle");
 
@@ -53,12 +67,37 @@ export function PostEditor() {
   const { ref: cardRef, onPointerMove } = useSpotlight<HTMLDivElement>();
 
   useEffect(() => {
+    // A linked draft is a one-shot editing session — don't overwrite the freehand draft.
+    if (draftId) return;
     try {
       localStorage.setItem(STORAGE_KEY, text);
     } catch {
       // Private mode or storage disabled — the editor still works, it just won't persist.
     }
-  }, [text]);
+  }, [text, draftId]);
+
+  useEffect(() => {
+    if (!draftId) return;
+    let cancelled = false;
+    getDraftById(draftId)
+      .then((draft) => {
+        if (cancelled) return;
+        setText(draft.postText);
+        setLinkedTitle(draft.title);
+        setSendState("idle");
+        setNotice(`Editing “${draft.title}”. Press Publish to LinkedIn when it's right.`);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setNotice(
+          err instanceof ApiError ? err.message : "Could not load that draft — it may have been cancelled.",
+        );
+      })
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [draftId]);
 
   const count = postLength(text);
   const overLimit = count > LINKEDIN_MAX_CHARS;
@@ -154,6 +193,31 @@ export function PostEditor() {
     }
   }
 
+  async function publishToLinkedIn() {
+    const trimmed = text.trim();
+    if (!draftId || !trimmed || sendState === "publishing") return;
+    if (overLimit) {
+      setNotice("This post is over LinkedIn's 3,000-character limit. Trim it first.");
+      return;
+    }
+    setSendState("publishing");
+    setNotice(null);
+    try {
+      const result = await publishEditedDraft(draftId, trimmed);
+      if (result.published) {
+        setSendState("sent");
+        setNotice("Safety check passed — publishing to LinkedIn now. Follow it on the Review tab.");
+        setTimeout(() => navigate("/review"), 1400);
+      } else {
+        setSendState("blocked");
+        setNotice(result.reason ?? "The safety check blocked this edit — it was not published.");
+      }
+    } catch (err) {
+      setSendState("error");
+      setNotice(err instanceof ApiError ? err.message : "Could not publish the post.");
+    }
+  }
+
   return (
     <motion.div
       className={styles.page}
@@ -163,10 +227,11 @@ export function PostEditor() {
     >
       <div className={styles.inputPane}>
         <div className={styles.header}>
-          <h1 className={styles.title}>Preview &amp; edit the post</h1>
+          <h1 className={styles.title}>{linkedTitle ? "Edit before publishing" : "Preview & edit the post"}</h1>
           <p className={styles.subtitle}>
-            Load the latest generated draft, format it with real LinkedIn-safe styling, and see exactly how the
-            feed will render it. When it's right, send it straight into the approval loop.
+            {linkedTitle
+              ? "Fine-tune the wording and formatting of the approved draft. Publish to LinkedIn re-runs the safety check on your edits, then posts it — the image is unchanged."
+              : "Load the latest generated draft, format it with real LinkedIn-safe styling, and see exactly how the feed will render it. When it's right, send it straight into the approval loop."}
           </p>
         </div>
 
@@ -185,14 +250,16 @@ export function PostEditor() {
                 {tool.label}
               </button>
             ))}
-            <button
-              type="button"
-              className={styles.loadButton}
-              onClick={loadLatest}
-              disabled={loading}
-            >
-              {loading ? <HexLoader length={4} label="Loading" /> : "Load latest draft"}
-            </button>
+            {!draftId && (
+              <button
+                type="button"
+                className={styles.loadButton}
+                onClick={loadLatest}
+                disabled={loading}
+              >
+                {loading ? <HexLoader length={4} label="Loading" /> : "Load latest draft"}
+              </button>
+            )}
           </div>
 
           <textarea
@@ -211,24 +278,52 @@ export function PostEditor() {
             <span className={overLimit ? styles.countOver : styles.count}>
               {count.toLocaleString()} / {LINKEDIN_MAX_CHARS.toLocaleString()}
             </span>
-            <button
-              type="button"
-              className={styles.send}
-              disabled={text.trim().length === 0 || overLimit || sendState === "sending"}
-              onClick={send}
-            >
-              {sendState === "sending" ? (
-                <HexLoader length={5} label="Sending" tone="dark" />
-              ) : sendState === "sent" ? (
-                "Sent"
-              ) : (
-                "Send through automation"
-              )}
-            </button>
+            {draftId ? (
+              <button
+                type="button"
+                className={styles.send}
+                disabled={
+                  text.trim().length === 0 ||
+                  overLimit ||
+                  sendState === "publishing" ||
+                  sendState === "sent"
+                }
+                onClick={publishToLinkedIn}
+              >
+                {sendState === "publishing" ? (
+                  <HexLoader length={5} label="Checking" tone="dark" />
+                ) : sendState === "sent" ? (
+                  "Publishing…"
+                ) : (
+                  "Publish to LinkedIn"
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={styles.send}
+                disabled={text.trim().length === 0 || overLimit || sendState === "sending"}
+                onClick={send}
+              >
+                {sendState === "sending" ? (
+                  <HexLoader length={5} label="Sending" tone="dark" />
+                ) : sendState === "sent" ? (
+                  "Sent"
+                ) : (
+                  "Send through automation"
+                )}
+              </button>
+            )}
           </div>
 
           {notice && (
-            <p className={`${styles.notice} ${sendState === "error" ? styles.noticeError : ""}`}>{notice}</p>
+            <p
+              className={`${styles.notice} ${
+                sendState === "error" || sendState === "blocked" ? styles.noticeError : ""
+              }`}
+            >
+              {notice}
+            </p>
           )}
         </div>
       </div>
