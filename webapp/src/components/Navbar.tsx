@@ -4,6 +4,7 @@ import styles from "./Navbar.module.css";
 
 const LINKS = [
   { to: "/", label: "New post", end: true },
+  { to: "/review", label: "Review", end: false },
   { to: "/editor", label: "Post editor", end: false },
   { to: "/posts", label: "Previous posts", end: false },
   { to: "/quota", label: "Quota", end: false },

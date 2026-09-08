@@ -88,3 +88,56 @@ export type ActivityEvent = {
   tone: "success" | "error" | "info";
   url?: string;
 };
+
+/* -------------------------------------------------------------------- review */
+
+export type RevisionScope = "text" | "image" | "both";
+
+/** Mirrors src/db/schema.ts ModerationReport. */
+export type ModerationReport = {
+  safe: boolean;
+  checkedAt: string;
+  text: { safe: boolean; categories: string[]; reason: string };
+  image: { safe: boolean; categories: string[]; reason: string } | null;
+};
+
+export type FeedbackEntry = { at: string; scope: RevisionScope; note: string };
+
+/** One topic offered for selection — mirrors src/db/schema.ts TopicCandidate. */
+export type ReviewTopic = {
+  title: string;
+  angle: string;
+  whyNow: string;
+  sources: { title: string; url: string; publisher?: string }[];
+};
+
+/** The batch whose pick-a-topic buttons are live, from GET /api/review. */
+export type ReviewTopicBatch = {
+  id: string;
+  topics: ReviewTopic[];
+  createdAt: string;
+};
+
+/** The draft the review page is currently about, from GET /api/review. */
+export type ReviewDraft = {
+  id: string;
+  topicTitle: string;
+  postText: string;
+  status: DraftStatus;
+  revisionCount: number;
+  maxRevisions: number;
+  moderation: ModerationReport | null;
+  hasImage: boolean;
+  /** Full URL (already `/api/...`) — fetch it with the Telegram auth header. */
+  imageUrl: string | null;
+  imageAltText: string | null;
+  feedbackHistory: FeedbackEntry[];
+  errorMessage: string | null;
+  updatedAt: string;
+};
+
+/** GET /api/review. */
+export type ReviewState = {
+  topicBatch: ReviewTopicBatch | null;
+  draft: ReviewDraft | null;
+};

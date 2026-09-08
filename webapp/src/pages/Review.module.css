@@ -1,0 +1,413 @@
+.page {
+  min-height: 100vh;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: calc(var(--nav-h) + 40px) 20px 60px;
+}
+
+.header {
+  margin-bottom: 28px;
+}
+
+.title {
+  font-size: clamp(1.4rem, 3.5vw, 1.9rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.92rem;
+}
+
+.status {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.statusError {
+  color: #ff8a8a;
+  font-size: 0.9rem;
+}
+
+/* ------------------------------------------------------------------- card */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.cardTitle {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.cardMeta {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  margin-bottom: 16px;
+}
+
+/* ---------------------------------------------------------------- working */
+
+.working {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px 0;
+  align-items: center;
+  text-align: center;
+}
+
+.workingNote {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+}
+
+/* ------------------------------------------------------------------ image */
+
+.figure {
+  margin: 16px 0 0;
+}
+
+.image {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  display: block;
+  background: var(--bg-elevated);
+  min-height: 120px;
+}
+
+.caption {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------- callouts */
+
+.modBox,
+.errorBox,
+.confirmBanner {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.modBox {
+  background: rgba(255, 176, 90, 0.1);
+  border: 1px solid rgba(255, 176, 90, 0.28);
+  color: #ffce9e;
+}
+
+.modBox ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.errorBox {
+  background: rgba(255, 122, 122, 0.1);
+  border: 1px solid rgba(255, 122, 122, 0.3);
+  color: #ff9c9c;
+}
+
+.confirmBanner {
+  background: rgba(255, 122, 122, 0.08);
+  border: 1px solid rgba(255, 122, 122, 0.28);
+  color: #ffb0b0;
+}
+
+.actionError {
+  margin-top: 12px;
+  font-size: 0.83rem;
+  color: #ff8a8a;
+}
+
+/* ----------------------------------------------------------------- actions */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.primary,
+.secondary,
+.danger {
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease), opacity 0.15s var(--ease);
+}
+
+.primary {
+  background: var(--accent);
+  color: #04120b;
+  border-color: var(--accent);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.secondary {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.danger {
+  background: transparent;
+  color: #ff9c9c;
+  border-color: rgba(255, 122, 122, 0.35);
+}
+
+.danger:hover:not(:disabled) {
+  background: rgba(255, 122, 122, 0.1);
+}
+
+.primary:disabled,
+.secondary:disabled,
+.danger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.linkBtn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.linkBtn:hover {
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------- revise form */
+
+.reviseForm {
+  margin-top: 16px;
+  padding: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reviseHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.scopeRow {
+  display: flex;
+  gap: 6px;
+}
+
+.scopeBtn {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.scopeBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.scopeBtnActive {
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+  color: var(--accent-strong);
+}
+
+.textarea {
+  width: 100%;
+  resize: vertical;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent-line);
+}
+
+.limitNote {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #ffb0b0;
+}
+
+/* ----------------------------------------------------------------- topics */
+
+.topicList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.topicBtn {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+
+.topicBtn:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  background: var(--surface-hover);
+}
+
+.topicBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.topicTitle {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.topicAngle {
+  font-size: 0.84rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+.topicWhy {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* ------------------------------------------------------------------ empty */
+
+.empty {
+  margin: 0 0 4px;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+/* --------------------------------------------------------------- activity */
+
+.log {
+  margin-top: 28px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.logHead {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-bottom: 10px;
+}
+
+.logRow {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  word-break: break-word;
+}
+
+.logRow:last-child {
+  border-bottom: none;
+}
+
+.logRow :global(b) {
+  color: var(--text);
+}
+
+.logRow :global(blockquote) {
+  margin: 4px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-faint);
+}
+
+.logRow :global(a) {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.tone_error {
+  color: #ff9c9c;
+}
+
+.tone_success {
+  color: var(--accent-strong);
+}
+
+.tone_info {
+  color: var(--text-dim);
+}
+
+@media (max-width: 560px) {
+  .cardTop {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}

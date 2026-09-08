@@ -9,6 +9,7 @@ import { NewPost } from "./pages/NewPost";
 import { PostEditor } from "./pages/PostEditor";
 import { PreviousPosts } from "./pages/PreviousPosts";
 import { Quota } from "./pages/Quota";
+import { Review } from "./pages/Review";
 
 const ACTIVITY_POLL_MS = 4000;
 
@@ -77,6 +78,7 @@ export default function App() {
             />
           }
         />
+        <Route path="/review" element={<Review />} />
         <Route path="/editor" element={<PostEditor />} />
         <Route path="/posts" element={<PreviousPosts />} />
         <Route path="/quota" element={<Quota />} />
