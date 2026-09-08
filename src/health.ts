@@ -1,4 +1,5 @@
 import { pingModel } from "./ai/gemini.js";
+import { modalImageEnabled, modalTextEnabled, pingModal } from "./ai/modalProxy.js";
 import { env } from "./config/env.js";
 import { countCallsByModel, getActiveGeminiModel, pingDb } from "./db/repo.js";
 import { getConnectedAccount } from "./linkedin/oauth.js";
@@ -69,6 +70,26 @@ async function timed(name: string, probe: () => Promise<string>): Promise<Check>
   }
 }
 
+/**
+ * Only meaningful when Modal is configured. Its endpoints being down is a "warn",
+ * not "down": the pipeline falls back to calling Gemini / pollinations directly.
+ */
+async function checkModal(): Promise<Check | null> {
+  if (!modalTextEnabled() && !modalImageEnabled()) return null;
+  const startedAt = Date.now();
+  try {
+    const detail = await withTimeout(pingModal(), "Modal");
+    return { name: "Modal", status: "ok", detail, ms: Date.now() - startedAt };
+  } catch (error) {
+    return {
+      name: "Modal",
+      status: "warn",
+      detail: `${errorMessage(error)} — falling back to direct Gemini / pollinations`,
+      ms: Date.now() - startedAt,
+    };
+  }
+}
+
 async function checkLinkedIn(): Promise<Check> {
   try {
     const account = await withTimeout(getConnectedAccount(), "LinkedIn");
@@ -129,7 +150,7 @@ async function readQuota(): Promise<HealthReport["quota"]> {
  * alongside. Never throws: a failed probe is a result, not an error.
  */
 export async function runHealthChecks(): Promise<HealthReport> {
-  const [database, gemini, linkedin, quota] = await Promise.all([
+  const [database, gemini, modal, linkedin, quota] = await Promise.all([
     timed("Database", async () => {
       await pingDb();
       return "reachable";
@@ -139,11 +160,12 @@ export async function runHealthChecks(): Promise<HealthReport> {
       await pingModel(model);
       return `${model} reachable`;
     }),
+    checkModal(),
     checkLinkedIn(),
     readQuota().catch(() => null),
   ]);
 
-  const checks = [database, gemini, linkedin];
+  const checks = [database, gemini, ...(modal ? [modal] : []), linkedin];
 
   // Quota rides on the same database as the first check, so a null here is already
   // reported by that row — fall back to an empty view rather than a second error.

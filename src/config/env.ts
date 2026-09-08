@@ -31,6 +31,19 @@ const schema = z.object({
   HUGGINGFACE_API_KEY: z.string().optional(),
   HUGGINGFACE_IMAGE_MODEL: z.string().default("black-forest-labs/FLUX.1-schnell"),
 
+  // Modal (https://modal.com) hosts the AI work when these are set: MODAL_AI_URL
+  // proxies every Gemini structured call, MODAL_IMAGE_URL runs SDXL for images.
+  // Leave any of them unset and that path stays exactly as before — direct Gemini
+  // and pollinations. When Modal is configured but a call to it fails, the code
+  // falls back to the direct path rather than failing the draft.
+  // Deploy the service from modal/ai_proxy.py — see modal/README.md.
+  MODAL_AI_URL: z.string().url().optional(),
+  MODAL_IMAGE_URL: z.string().url().optional(),
+  /** Shared bearer token both Modal endpoints check; must match the linkedin-ai-auth secret. */
+  MODAL_PROXY_TOKEN: z.string().optional(),
+  /** SDXL cold start (container boot + weight load) can take a couple of minutes. */
+  MODAL_IMAGE_TIMEOUT_MS: z.coerce.number().int().positive().default(210_000),
+
   TELEGRAM_BOT_TOKEN: z.string().min(1, "TELEGRAM_BOT_TOKEN is required"),
   TELEGRAM_CHAT_ID: z.string().min(1, "TELEGRAM_CHAT_ID is required"),
   /** Leave unset to pick automatically — see `telegramMode` at the bottom of this file. */
@@ -71,6 +84,10 @@ export const env = parsed.data;
 
 if (env.IMAGE_PROVIDER === "huggingface" && !env.HUGGINGFACE_API_KEY) {
   throw new Error("IMAGE_PROVIDER=huggingface requires HUGGINGFACE_API_KEY to be set");
+}
+
+if ((env.MODAL_AI_URL || env.MODAL_IMAGE_URL) && !env.MODAL_PROXY_TOKEN) {
+  throw new Error("MODAL_AI_URL / MODAL_IMAGE_URL require MODAL_PROXY_TOKEN to be set");
 }
 
 export const isProduction = env.NODE_ENV === "production";

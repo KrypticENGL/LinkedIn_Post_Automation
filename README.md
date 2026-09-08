@@ -57,6 +57,7 @@ doesn't undo an earlier fix while applying a new one.
 | Topic discovery | Google News RSS | Free, no API key, no registration |
 | Copywriting & curation | Gemini (`gemini-3.7-flash`) | Free tier, `responseSchema` JSON, schema-validated |
 | Image generation | Pollinations (default) or Hugging Face FLUX.1-schnell | Both free; Pollinations needs no key at all |
+| Optional AI host | Modal (`modal/ai_proxy.py`) | Proxies the Gemini calls + runs SDXL on a GPU; falls back to direct when unset or down |
 | Safety screening | Gemini text classifier + Gemini vision | Fails closed — an errored check blocks the post |
 | Approval | Telegram via grammY, webhook in prod | Two-stage confirmation, persisted state |
 | Database | PostgreSQL via Drizzle | Neon / Supabase free tier |
@@ -77,6 +78,12 @@ doesn't undo an earlier fix while applying a new one.
 - **Free image generation.** Pollinations by default (no key, no billing), with
   Hugging Face as a drop-in alternative behind `IMAGE_PROVIDER`. Note the free tier may
   return a smaller image than the requested `IMAGE_WIDTH`/`IMAGE_HEIGHT`.
+- **Modal is an optional AI host, not a requirement.** Set `MODAL_AI_URL` /
+  `MODAL_IMAGE_URL` / `MODAL_PROXY_TOKEN` and every Gemini call is proxied through a
+  Modal function and images are rendered by SDXL on a Modal GPU (`modal/ai_proxy.py`).
+  It is wired as a front for the existing paths: any failed Modal call falls back to
+  calling Gemini / pollinations directly, so it never becomes a single point of
+  failure. Unset, the code behaves exactly as before. See `modal/README.md`.
 - **A safety gate the blueprint didn't have.** Text and image are both screened before
   you ever see them, and a blocked draft cannot reach the publish path at all.
 - **Rejection is a conversation, not a dead end.** The blueprint's open question ("should

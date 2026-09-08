@@ -1,5 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  modalCoolingDown,
+  modalImageEnabled,
+  noteModalFailure,
+  noteModalSuccess,
+} from "../ai/modalProxy.js";
 import { clientProfile } from "../config/clientProfile.js";
 import { env } from "../config/env.js";
 import { errorMessage, logger } from "../logger.js";
@@ -14,7 +20,14 @@ export type GeneratedImage = {
   provider: string;
 };
 
-type Provider = (prompt: string, seed: number) => Promise<{ bytes: Buffer; mediaType: GeneratedImage["mediaType"] }>;
+type ProviderResult = {
+  bytes: Buffer;
+  mediaType: GeneratedImage["mediaType"];
+  /** Which backend actually produced the bytes — recorded on GeneratedImage. */
+  provider: string;
+};
+
+type Provider = (prompt: string, seed: number) => Promise<ProviderResult>;
 
 function normaliseMediaType(contentType: string | null): GeneratedImage["mediaType"] {
   if (!contentType) return "image/png";
@@ -22,6 +35,40 @@ function normaliseMediaType(contentType: string | null): GeneratedImage["mediaTy
   if (contentType.includes("webp")) return "image/webp";
   return "image/png";
 }
+
+/**
+ * Stable Diffusion XL on a Modal GPU — see modal/ai_proxy.py. Only used when
+ * MODAL_IMAGE_URL is set; generateImage() falls back to the keyless provider below
+ * if a call here fails.
+ */
+const modal: Provider = async (prompt, seed) => {
+  if (!env.MODAL_IMAGE_URL || !env.MODAL_PROXY_TOKEN) {
+    throw new Error("Modal image endpoint is not configured");
+  }
+
+  const response = await fetch(env.MODAL_IMAGE_URL, {
+    method: "POST",
+    signal: AbortSignal.timeout(env.MODAL_IMAGE_TIMEOUT_MS),
+    headers: {
+      "content-type": "application/json",
+      accept: "image/*",
+      authorization: `Bearer ${env.MODAL_PROXY_TOKEN}`,
+    },
+    body: JSON.stringify({
+      prompt,
+      seed,
+      width: env.IMAGE_WIDTH,
+      height: env.IMAGE_HEIGHT,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Modal image returned ${response.status}: ${(await response.text()).slice(0, 200)}`);
+  }
+
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return { bytes, mediaType: normaliseMediaType(response.headers.get("content-type")), provider: "modal" };
+};
 
 /** Free, keyless. Renders synchronously on GET and streams the image back. */
 const pollinations: Provider = async (prompt, seed) => {
@@ -42,7 +89,11 @@ const pollinations: Provider = async (prompt, seed) => {
   }
 
   const bytes = Buffer.from(await response.arrayBuffer());
-  return { bytes, mediaType: normaliseMediaType(response.headers.get("content-type")) };
+  return {
+    bytes,
+    mediaType: normaliseMediaType(response.headers.get("content-type")),
+    provider: "pollinations",
+  };
 };
 
 /** Free tier of the Hugging Face Inference API (FLUX.1-schnell by default). */
@@ -73,10 +124,40 @@ const huggingface: Provider = async (prompt) => {
   }
 
   const bytes = Buffer.from(await response.arrayBuffer());
-  return { bytes, mediaType: normaliseMediaType(response.headers.get("content-type")) };
+  return {
+    bytes,
+    mediaType: normaliseMediaType(response.headers.get("content-type")),
+    provider: "huggingface",
+  };
 };
 
 const PROVIDERS: Record<typeof env.IMAGE_PROVIDER, Provider> = { pollinations, huggingface };
+
+/**
+ * The provider generateImage() actually calls: Modal first when it is configured,
+ * with the keyless provider (pollinations by default) as the automatic fallback so
+ * a Modal outage or GPU cold-start timeout does not fail the draft.
+ */
+const resolveProvider = (): Provider => {
+  const fallback = PROVIDERS[env.IMAGE_PROVIDER];
+  if (!modalImageEnabled()) return fallback;
+
+  return async (prompt, seed) => {
+    if (modalCoolingDown()) return fallback(prompt, seed);
+    try {
+      const result = await modal(prompt, seed);
+      noteModalSuccess();
+      return result;
+    } catch (error) {
+      noteModalFailure();
+      logger.warn(
+        { err: errorMessage(error), fallback: env.IMAGE_PROVIDER },
+        "Modal image generation failed, falling back",
+      );
+      return fallback(prompt, seed);
+    }
+  };
+};
 
 /**
  * Appends the client's house style and the "no text in image" guard rails.
@@ -99,7 +180,7 @@ export async function generateImage(
   revision: number,
   basePrompt: string,
 ): Promise<GeneratedImage> {
-  const provider = PROVIDERS[env.IMAGE_PROVIDER];
+  const provider = resolveProvider();
   const prompt = buildImagePrompt(basePrompt);
 
   let lastError: unknown;
@@ -107,7 +188,7 @@ export async function generateImage(
     try {
       // A fresh seed each attempt so a retry does not reproduce a failed render.
       const seed = Math.floor(Math.random() * 1_000_000);
-      const { bytes, mediaType } = await provider(prompt, seed);
+      const { bytes, mediaType, provider: usedProvider } = await provider(prompt, seed);
 
       if (bytes.byteLength < 1024) {
         throw new Error(`Image provider returned only ${bytes.byteLength} bytes`);
@@ -119,10 +200,10 @@ export async function generateImage(
       await writeFile(filePath, bytes);
 
       logger.info(
-        { draftId, revision, provider: env.IMAGE_PROVIDER, bytes: bytes.byteLength },
+        { draftId, revision, provider: usedProvider, bytes: bytes.byteLength },
         "Generated image",
       );
-      return { filePath, bytes, mediaType, provider: env.IMAGE_PROVIDER };
+      return { filePath, bytes, mediaType, provider: usedProvider };
     } catch (error) {
       lastError = error;
       logger.warn(

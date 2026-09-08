@@ -38,6 +38,16 @@ services:
         sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+
+      # Optional: run the AI work on Modal (https://modal.com). Leave unset to
+      # call Gemini / pollinations directly. Deploy modal/ai_proxy.py, then paste
+      # the two .modal.run URLs it prints and the shared token here.
+      - key: MODAL_AI_URL
+        sync: false
+      - key: MODAL_IMAGE_URL
+        sync: false
+      - key: MODAL_PROXY_TOKEN
+        sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
       - key: LINKEDIN_CLIENT_ID

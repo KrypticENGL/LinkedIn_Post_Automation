@@ -2,6 +2,7 @@ import { z } from "zod";
 import { env } from "../config/env.js";
 import { getActiveGeminiModel, recordUsage } from "../db/repo.js";
 import { errorMessage, logger } from "../logger.js";
+import { generateViaModal, ModalUnavailableError, modalTextEnabled } from "./modalProxy.js";
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -128,6 +129,44 @@ function bookUsage(label: string, model: string, body: GeminiResponse, ok: boole
 /** finishReason values that mean "the model would not answer", not "the model failed". */
 const REFUSAL_REASONS = new Set(["SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII"]);
 
+/**
+ * One `generateContent` round trip, returning the raw status and body. When the
+ * Modal proxy is configured (src/ai/modalProxy.ts) the request goes through it;
+ * any proxy-side failure falls back to calling Google directly, so a Modal outage
+ * costs a warning line, not a blocked draft. A working proxy relaying a Gemini
+ * error (429, 503, …) is *not* a fallback case — that status is returned as-is.
+ */
+async function requestGemini(
+  model: string,
+  requestBody: unknown,
+  label: string,
+): Promise<{ status: number; bodyText: string }> {
+  if (modalTextEnabled()) {
+    try {
+      return await generateViaModal(model, requestBody);
+    } catch (error) {
+      if (!(error instanceof ModalUnavailableError)) throw error;
+      logger.warn(
+        { label, model, err: error.message },
+        "Modal AI proxy unavailable, calling Gemini directly",
+      );
+    }
+  }
+
+  const response = await fetch(`${API_BASE}/${model}:generateContent`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      // Header rather than ?key= so the key never lands in a URL or proxy log.
+      "x-goog-api-key": env.GEMINI_API_KEY,
+    },
+    signal: AbortSignal.timeout(120_000),
+    body: JSON.stringify(requestBody),
+  });
+
+  return { status: response.status, bodyText: await response.text() };
+}
+
 async function generate(
   model: string,
   options: StructuredOptions<z.ZodTypeAny>,
@@ -142,36 +181,33 @@ async function generate(
   }
   parts.push({ text: options.prompt });
 
-  const response = await fetch(`${API_BASE}/${model}:generateContent`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      // Header rather than ?key= so the key never lands in a URL or proxy log.
-      "x-goog-api-key": env.GEMINI_API_KEY,
+  const requestBody = {
+    contents: [{ role: "user", parts }],
+    systemInstruction: { parts: [{ text: options.system }] },
+    safetySettings: SAFETY_SETTINGS,
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema,
+      maxOutputTokens: options.maxTokens ?? 8000,
+      thinkingConfig: { thinkingLevel: THINKING_LEVEL[options.effort ?? "high"] },
     },
-    signal: AbortSignal.timeout(120_000),
-    body: JSON.stringify({
-      contents: [{ role: "user", parts }],
-      systemInstruction: { parts: [{ text: options.system }] },
-      safetySettings: SAFETY_SETTINGS,
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema,
-        maxOutputTokens: options.maxTokens ?? 8000,
-        thinkingConfig: { thinkingLevel: THINKING_LEVEL[options.effort ?? "high"] },
-      },
-    }),
-  });
+  };
 
-  if (!response.ok) {
-    const message = `Gemini ${model} returned ${response.status}: ${(await response.text()).slice(0, 300)}`;
-    if (RETRYABLE_STATUS.has(response.status)) {
-      throw new TransientError(response.status, message);
+  const { status, bodyText } = await requestGemini(model, requestBody, options.label);
+
+  if (status < 200 || status >= 300) {
+    const message = `Gemini ${model} returned ${status}: ${bodyText.slice(0, 300)}`;
+    if (RETRYABLE_STATUS.has(status)) {
+      throw new TransientError(status, message);
     }
     throw new Error(message);
   }
 
-  return (await response.json()) as GeminiResponse;
+  try {
+    return JSON.parse(bodyText) as GeminiResponse;
+  } catch {
+    throw new Error(`Gemini ${model} returned a non-JSON body: ${bodyText.slice(0, 200)}`);
+  }
 }
 
 /**
