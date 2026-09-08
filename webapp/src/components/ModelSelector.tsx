@@ -66,6 +66,8 @@ export function ModelSelector() {
   }
 
   const activeModel = info?.active ?? info?.default ?? null;
+  // Only shown when Modal is in the loop — otherwise there's no ambiguity to resolve.
+  const service = info?.modalEnabled ? info.activeService : null;
   const isBusy = saving || (!info && !error);
   const label =
     error && !info ? (
@@ -73,7 +75,10 @@ export function ModelSelector() {
     ) : isBusy ? (
       <HexLoader length={5} label={saving ? "Switching model" : "Loading model"} />
     ) : (
-      activeModel
+      <>
+        {activeModel}
+        {service && <span className={styles.serviceTag}> ({service})</span>}
+      </>
     );
   const options = info ? [...new Set([info.default, info.fallback])] : [];
 
@@ -106,7 +111,10 @@ export function ModelSelector() {
                 disabled={saving}
                 onClick={() => choose(model)}
               >
-                <span className={styles.optionLabel}>{model}</span>
+                <span className={styles.optionLabel}>
+                  {model}
+                  {model === activeModel && service ? ` (${service})` : ""}
+                </span>
                 <span className={styles.optionNote}>
                   {model === info.default ? "default" : model === info.fallback ? "fallback" : ""}
                 </span>
@@ -132,6 +140,10 @@ export function ModelSelector() {
               </button>
             )}
           </li>
+
+          {info.modalEnabled && (
+            <li className={styles.routeNote}>Route: Modal → Google AI Studio</li>
+          )}
 
           {error && <li className={styles.errorRow}>{error}</li>}
         </ul>

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { pingModel } from "../ai/gemini.js";
+import { modalCoolingDown, modalTextEnabled } from "../ai/modalProxy.js";
 import { env } from "../config/env.js";
 import {
   buildDeauthMessage,
@@ -35,9 +36,25 @@ miniAppRouter.use(requireApprover);
 
 /* ------------------------------------------------------------------ model */
 
+/**
+ * The model picker also needs to know which *service* is answering: when Modal is
+ * configured every call goes to it first and falls back to Google AI Studio on
+ * failure (see src/ai/modalProxy.ts). `activeService` is the best guess right now —
+ * "Google AI Studio" while Modal is in its post-failure cooldown.
+ */
+function modelInfo(active: string | null) {
+  const modal = modalTextEnabled();
+  return {
+    active,
+    default: env.GEMINI_MODEL,
+    fallback: env.GEMINI_FALLBACK_MODEL,
+    modalEnabled: modal,
+    activeService: modal && !modalCoolingDown() ? "Modal" : "Google AI Studio",
+  };
+}
+
 miniAppRouter.get("/model", async (_req, res) => {
-  const active = await getActiveGeminiModel();
-  res.json({ active, default: env.GEMINI_MODEL, fallback: env.GEMINI_FALLBACK_MODEL });
+  res.json(modelInfo(await getActiveGeminiModel()));
 });
 
 const setModelBody = z.object({ model: z.string().trim().min(1).max(200) });
@@ -53,7 +70,7 @@ miniAppRouter.post("/model", async (req, res) => {
 
   if (model === "default" || model === "reset") {
     await setActiveGeminiModel(null);
-    res.json({ active: null, default: env.GEMINI_MODEL, fallback: env.GEMINI_FALLBACK_MODEL });
+    res.json(modelInfo(null));
     return;
   }
 
@@ -65,7 +82,7 @@ miniAppRouter.post("/model", async (req, res) => {
   }
 
   await setActiveGeminiModel(model);
-  res.json({ active: model, default: env.GEMINI_MODEL, fallback: env.GEMINI_FALLBACK_MODEL });
+  res.json(modelInfo(model));
 });
 
 /* ------------------------------------------------------------------ quota */

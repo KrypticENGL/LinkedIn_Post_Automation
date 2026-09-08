@@ -37,6 +37,12 @@
   margin-left: 2px;
 }
 
+/* "(Modal)" / "(Google AI Studio)" after the model name — which service answers. */
+.serviceTag {
+  color: var(--text-faint);
+  font-family: var(--font-sans);
+}
+
 .menu {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -115,6 +121,14 @@
 .customInput:focus {
   outline: none;
   border-color: var(--accent-line);
+}
+
+.routeNote {
+  margin-top: 4px;
+  padding: 7px 10px 3px;
+  border-top: 1px solid var(--border);
+  font-size: 0.72rem;
+  color: var(--text-faint);
 }
 
 .errorRow {

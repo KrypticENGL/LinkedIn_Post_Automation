@@ -40,11 +40,19 @@ export type QuotaReport = {
   timeZone: string;
 };
 
+/** Which backend answers the AI calls — see src/ai/modalProxy.ts. */
+export type AiService = "Modal" | "Google AI Studio";
+
 /** Matches GET/POST /api/model. */
 export type ModelInfo = {
   active: string | null;
   default: string;
   fallback: string;
+  /** True when MODAL_AI_URL is configured: calls go to Modal, then Google as fallback. */
+  modalEnabled: boolean;
+  /** Best guess at which service is serving right now ("Google AI Studio" during
+   *  Modal's post-failure cooldown). */
+  activeService: AiService;
 };
 
 /**
