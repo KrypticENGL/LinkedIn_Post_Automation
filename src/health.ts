@@ -2,7 +2,7 @@ import { pingModel } from "./ai/gemini.js";
 import { modalImageEnabled, modalTextEnabled, pingModal } from "./ai/modalProxy.js";
 import { env } from "./config/env.js";
 import { countCallsByModel, getActiveGeminiModel, pingDb } from "./db/repo.js";
-import { getConnectedAccount } from "./linkedin/oauth.js";
+import { getConnectedAccount, storedTokenReadable } from "./linkedin/oauth.js";
 import { errorMessage } from "./logger.js";
 import { startOfDayIn } from "./time.js";
 
@@ -96,6 +96,11 @@ async function checkLinkedIn(): Promise<Check> {
     if (!account) {
       // Not an outage — the bot runs fine until it tries to publish.
       return { name: "LinkedIn", status: "warn", detail: "no account connected — run /auth" };
+    }
+
+    const readable = await storedTokenReadable();
+    if (readable && !readable.ok) {
+      return { name: "LinkedIn", status: "down", detail: `${readable.reason} (${account.memberUrn})` };
     }
 
     const remainingMs = account.expiresAt.getTime() - Date.now();

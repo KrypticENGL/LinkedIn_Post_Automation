@@ -134,6 +134,24 @@ async function latestToken() {
 const REFRESH_SKEW_MS = 5 * 60 * 1000;
 
 /**
+ * Decrypts a stored token, turning the one failure that isn't the caller's fault —
+ * TOKEN_ENCRYPTION_KEY no longer matching the key the token was saved with — into a
+ * clear "run /auth" message rather than node's raw "Unsupported state or unable to
+ * authenticate data" GCM error leaking out as a generic publish failure.
+ */
+function readStoredToken(ciphertext: string): string {
+  try {
+    return decryptSecret(ciphertext);
+  } catch (error) {
+    logger.error({ err: errorMessage(error) }, "Stored LinkedIn token failed to decrypt");
+    throw new LinkedInAuthRequiredError(
+      "The stored LinkedIn token can no longer be decrypted — TOKEN_ENCRYPTION_KEY has changed " +
+        "since it was saved. Run /deauth then /auth to reconnect.",
+    );
+  }
+}
+
+/**
  * Returns a usable access token and the member URN to post as, refreshing in place
  * when the stored access token is close to expiry.
  *
@@ -147,7 +165,7 @@ export async function getLinkedInCredentials(): Promise<{ accessToken: string; m
   }
 
   if (row.expiresAt.valueOf() - REFRESH_SKEW_MS > Date.now()) {
-    return { accessToken: decryptSecret(row.accessToken), memberUrn: row.memberUrn };
+    return { accessToken: readStoredToken(row.accessToken), memberUrn: row.memberUrn };
   }
 
   if (!row.refreshToken) {
@@ -164,7 +182,7 @@ export async function getLinkedInCredentials(): Promise<{ accessToken: string; m
   logger.info({ memberUrn: row.memberUrn }, "Refreshing LinkedIn access token");
   const tokens = await postForm({
     grant_type: "refresh_token",
-    refresh_token: decryptSecret(row.refreshToken),
+    refresh_token: readStoredToken(row.refreshToken),
     client_id: env.LINKEDIN_CLIENT_ID,
     client_secret: env.LINKEDIN_CLIENT_SECRET,
   });
@@ -247,4 +265,20 @@ export async function disconnectLinkedIn(): Promise<{ memberUrn: string; revoked
 export async function getConnectedAccount(): Promise<{ memberUrn: string; expiresAt: Date } | null> {
   const row = await latestToken();
   return row ? { memberUrn: row.memberUrn, expiresAt: row.expiresAt } : null;
+}
+
+/**
+ * Whether the stored token can actually be decrypted with the current
+ * TOKEN_ENCRYPTION_KEY. `/test` uses this so a key mismatch shows up as a failed
+ * check rather than only at publish time. Returns null when nothing is connected.
+ */
+export async function storedTokenReadable(): Promise<{ ok: boolean; reason?: string } | null> {
+  const row = await latestToken();
+  if (!row) return null;
+  try {
+    decryptSecret(row.accessToken);
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: "TOKEN_ENCRYPTION_KEY changed — run /deauth then /auth" };
+  }
 }
