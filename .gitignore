@@ -3,6 +3,8 @@
 
 # Machine-local editor/tooling settings (absolute paths, per-machine permissions)
 .claude/settings.local.json
+# Per-machine scratch checkouts for parallel background jobs
+.claude/worktrees/
 
 node_modules/
 dist/
