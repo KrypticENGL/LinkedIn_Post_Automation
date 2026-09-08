@@ -13,7 +13,6 @@ import type {
 } from "../data/types";
 import {
   ApiError,
-  approveDraft,
   cancelDraft,
   getActivity,
   getReview,
@@ -31,10 +30,37 @@ const WORKING_STATUSES = new Set(["generating", "moderating", "publishing"]);
 
 type LoadState = "loading" | "ready" | "error";
 
+/** Marks a draft *round* we've already sent the user to the editor for — includes
+ *  the revision count so a fresh revision opens the editor again. */
+const sentKey = (id: string, revision: number) => `sigmoid.review.sentToEditor:${id}:${revision}`;
+
 export function Review() {
+  const navigate = useNavigate();
   const [review, setReview] = useState<ReviewState | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const sentToEditor = useRef<Set<string>>(new Set());
+
+  // The moment a freshly generated draft is ready for review, take the user to the
+  // Post editor to fine-tune and publish it — once per draft, so returning to this
+  // tab (or a background poll) doesn't bounce them back.
+  useEffect(() => {
+    const draft = review?.draft;
+    if (!draft || draft.status !== "pending_review") return;
+    const round = `${draft.id}:${draft.revisionCount}`;
+    if (sentToEditor.current.has(round)) return;
+    sentToEditor.current.add(round);
+
+    let seen = false;
+    try {
+      const k = sentKey(draft.id, draft.revisionCount);
+      seen = sessionStorage.getItem(k) === "1";
+      if (!seen) sessionStorage.setItem(k, "1");
+    } catch {
+      // sessionStorage unavailable — the in-memory Set still guards this mount.
+    }
+    if (!seen) navigate(`/editor?draft=${draft.id}`);
+  }, [review, navigate]);
 
   const refresh = useCallback(async () => {
     try {
@@ -67,7 +93,7 @@ export function Review() {
       <div className={styles.header}>
         <h1 className={styles.title}>Review</h1>
         <p className={styles.subtitle}>
-          Pick a topic, approve or revise a draft, and publish — the same steps as the bot's buttons.
+          Pick a topic; a generated draft opens in the Post editor to fine-tune and publish. Or send it back for changes.
         </p>
       </div>
 
@@ -228,9 +254,9 @@ function DraftCard({ draft, onChanged }: { draft: ReviewDraft; onChanged: () => 
           <button
             className={styles.primary}
             disabled={busy !== null}
-            onClick={() => void run("approve", () => approveDraft(draft.id))}
+            onClick={() => navigate(`/editor?draft=${draft.id}`)}
           >
-            {busy === "approve" ? "Approving…" : "Approve"}
+            Edit &amp; publish
           </button>
           <button className={styles.secondary} disabled={busy !== null} onClick={() => setReviseOpen((v) => !v)}>
             Request changes
