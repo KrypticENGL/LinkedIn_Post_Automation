@@ -12,7 +12,9 @@ import {
   setDraftStatus,
   updateDraft,
 } from "../db/repo.js";
-import type { Draft, TopicBatch, TopicCandidate } from "../db/schema.js";
+import type { Draft, ModerationReport, TopicBatch, TopicCandidate } from "../db/schema.js";
+import { MAX_POST_CHARS } from "../generation/post.js";
+import { describeModeration, moderateDraft } from "../moderation/index.js";
 import { errorMessage, logger } from "../logger.js";
 import { proposeTopics } from "../pipeline/dailyRun.js";
 import {
@@ -177,6 +179,23 @@ reviewRouter.get("/drafts/:id/image", async (req, res) => {
 
 /* -------------------------------------------------------------------- drafts */
 
+/** One draft's text and state — the Post editor loads this when opened with
+ *  `?draft=<id>` to fine-tune the wording before publishing. */
+reviewRouter.get("/drafts/:id", async (req, res) => {
+  const draft = await getDraft(String(req.params.id));
+  if (!draft) {
+    res.status(404).json({ error: "That draft no longer exists." });
+    return;
+  }
+  res.json({
+    id: draft.id,
+    title: draft.topicTitle,
+    postText: draft.postText ?? "",
+    status: draft.status,
+    hasImage: Boolean(draft.imagePath),
+  });
+});
+
 /** Loads the draft named in the URL, or answers 404 and returns null. */
 async function loadDraft(req: Request, res: Response): Promise<Draft | null> {
   const draft = await getDraft(String(req.params.id));
@@ -285,4 +304,52 @@ reviewRouter.post("/drafts/:id/cancel", async (req, res) => {
   await clearConversationState(APPROVER_CHAT_ID);
   await notify("🗑 Post cancelled from the web app. Nothing was sent to LinkedIn.");
   res.json({ draft: toReviewDraft(updated) });
+});
+
+const publishBody = z.object({ postText: z.string().trim().min(1).max(3000) });
+
+/**
+ * Publish an approved draft with hand-edited text — the Post editor's "Publish to
+ * LinkedIn" button. Swaps in the edited wording, re-runs the text safety gate
+ * (the image is unchanged, so its earlier verdict stands), and on a pass hands
+ * off to the same publishDraft() the confirm button uses. A fail parks the draft
+ * as moderation_blocked and nothing goes out.
+ */
+reviewRouter.post("/drafts/:id/publish", async (req, res) => {
+  const parsed = publishBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "postText is required" });
+    return;
+  }
+
+  const draft = await loadDraft(req, res);
+  if (!draft) return;
+
+  if (!["pending_review", "awaiting_confirmation", "moderation_blocked"].includes(draft.status)) {
+    res.status(409).json({ error: `Draft is ${draft.status}; it can't be published from the editor.` });
+    return;
+  }
+
+  const postText = parsed.data.postText.slice(0, MAX_POST_CHARS);
+  const fresh = await moderateDraft({ postText, image: null });
+  const merged: ModerationReport = {
+    safe: fresh.text.safe && (draft.moderation?.image ? draft.moderation.image.safe : true),
+    checkedAt: fresh.checkedAt,
+    text: fresh.text,
+    image: draft.moderation?.image ?? null,
+  };
+
+  if (!merged.safe) {
+    await updateDraft(draft.id, { postText, moderation: merged, status: "moderation_blocked" });
+    await notify(
+      `🚫 The edited post failed the safety check — not published.\n${escapeHtml(describeModeration(merged))}`,
+    );
+    res.status(200).json({ published: false, reason: describeModeration(merged) });
+    return;
+  }
+
+  await updateDraft(draft.id, { postText, moderation: merged, status: "awaiting_confirmation" });
+  await notify("✍️ Publishing a hand-edited version from the web app…");
+  res.status(202).json({ published: true });
+  detach("Publish", publishDraft(draft.id));
 });
