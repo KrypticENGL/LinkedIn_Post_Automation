@@ -126,6 +126,17 @@ export async function listRecentDrafts(limit = 5): Promise<Draft[]> {
   return db.select().from(drafts).orderBy(desc(drafts.createdAt)).limit(limit);
 }
 
+/** The most recent draft that has post text — what the web app's preview editor loads. */
+export async function latestDraftWithText(): Promise<Draft | null> {
+  const rows = await db
+    .select()
+    .from(drafts)
+    .where(sql`${drafts.postText} is not null and length(trim(${drafts.postText})) > 0`)
+    .orderBy(desc(drafts.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function cancelStaleDrafts(): Promise<number> {
   const rows = await db
     .update(drafts)

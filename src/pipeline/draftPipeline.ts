@@ -204,6 +204,74 @@ export async function startDraftFromTopic(
   return runProductionCycle(draft.id, { kind: "new" });
 }
 
+/** The topic title shown on the review card — the post's first non-empty line. */
+function titleFromText(text: string): string {
+  const firstLine = text
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  if (!firstLine) return "Untitled post";
+  return firstLine.length > 80 ? `${firstLine.slice(0, 79)}…` : firstLine;
+}
+
+/**
+ * The web app's preview editor lets the reviewer write (or edit a generated draft's)
+ * post text by hand, then send that exact text on. There is nothing to generate and
+ * no image — just run the same safety gate every other draft passes and hand it to
+ * the Telegram review/confirm/publish loop. See src/miniapp/router.ts's
+ * POST /api/posts/from-text.
+ */
+export async function startDraftFromText(rawText: string): Promise<Draft> {
+  const postText = rawText.trim().slice(0, MAX_POST_CHARS);
+  if (postText.length === 0) throw new Error("Cannot send an empty post");
+
+  const topic: TopicCandidate = {
+    title: titleFromText(postText),
+    angle: postText,
+    whyNow: "Composed in the Sigmσid web app preview editor.",
+    sources: [],
+  };
+
+  const draft = await createDraft({ topicBatchId: null, topic });
+  logger.info({ draftId: draft.id, chars: postText.length }, "Draft started from web app text");
+
+  let current = await updateDraft(draft.id, {
+    postText,
+    imagePrompt: null,
+    imageAltText: null,
+    imagePath: null,
+    status: "moderating",
+    errorMessage: null,
+  });
+
+  const notice = await sendWorkingNotice("🔎 Checking a post you sent from the web app…");
+
+  try {
+    const report = await moderateDraft({ postText, image: null });
+    current = await updateDraft(draft.id, {
+      moderation: report,
+      moderationAttempts: report.safe ? 0 : 1,
+    });
+
+    await deleteMessage(notice);
+
+    if (report.safe) {
+      current = await updateDraft(draft.id, { status: "pending_review" });
+      return presentDraftForReview(current);
+    }
+
+    current = await updateDraft(draft.id, { status: "moderation_blocked" });
+    return presentBlockedDraft(current);
+  } catch (error) {
+    await deleteMessage(notice);
+    const reason = errorMessage(error);
+    logger.error({ draftId: draft.id, err: reason }, "Web app text cycle failed");
+    await updateDraft(draft.id, { status: "failed", errorMessage: reason });
+    await notify(`❗️ Could not check that post.\n<code>${reason}</code>`);
+    throw error;
+  }
+}
+
 export async function applyReviewerFeedback(
   draftId: string,
   scope: RevisionScope,

@@ -6,6 +6,7 @@ import type { ComposerEntry } from "./data/types";
 import { getActivity } from "./lib/api";
 import { initTelegramWebApp } from "./lib/telegram";
 import { NewPost } from "./pages/NewPost";
+import { PostEditor } from "./pages/PostEditor";
 import { PreviousPosts } from "./pages/PreviousPosts";
 import { Quota } from "./pages/Quota";
 
@@ -76,6 +77,7 @@ export default function App() {
             />
           }
         />
+        <Route path="/editor" element={<PostEditor />} />
         <Route path="/posts" element={<PreviousPosts />} />
         <Route path="/quota" element={<Quota />} />
       </Routes>
