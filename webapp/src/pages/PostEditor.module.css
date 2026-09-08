@@ -125,6 +125,29 @@
   background: var(--surface-hover);
 }
 
+/* Plain letter faces, styled the way LinkedIn's own formatting controls read. */
+.toolButton[data-face="bold"],
+.toolButton[data-face="boldItalic"] {
+  font-weight: 700;
+}
+
+.toolButton[data-face="italic"],
+.toolButton[data-face="boldItalic"] {
+  font-style: italic;
+}
+
+.toolButton[data-face="underline"] {
+  text-decoration: underline;
+}
+
+.toolButton[data-face="strikethrough"] {
+  text-decoration: line-through;
+}
+
+.toolButton[data-face="clear"] {
+  font-size: 0.78rem;
+}
+
 .loadButton {
   margin-left: auto;
   padding: 7px 12px;

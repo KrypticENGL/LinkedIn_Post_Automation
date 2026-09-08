@@ -23,14 +23,14 @@ type ClearTool = { kind: "clear"; label: string; title: string };
 type Tool = InlineTool | BlockTool | ClearTool;
 
 const TOOLS: Tool[] = [
-  { kind: "inline", style: "bold", label: "𝗕", title: "Bold" },
-  { kind: "inline", style: "italic", label: "𝘐", title: "Italic" },
-  { kind: "inline", style: "boldItalic", label: "𝘽", title: "Bold italic" },
-  { kind: "inline", style: "underline", label: "U̲", title: "Underline" },
-  { kind: "inline", style: "strikethrough", label: "S̵", title: "Strikethrough" },
+  { kind: "inline", style: "bold", label: "B", title: "Bold" },
+  { kind: "inline", style: "italic", label: "I", title: "Italic" },
+  { kind: "inline", style: "boldItalic", label: "BI", title: "Bold italic" },
+  { kind: "inline", style: "underline", label: "U", title: "Underline" },
+  { kind: "inline", style: "strikethrough", label: "S", title: "Strikethrough" },
   { kind: "block", style: "bullet", label: "•", title: "Bulleted list" },
   { kind: "block", style: "numbered", label: "1.", title: "Numbered list" },
-  { kind: "clear", label: "⌫", title: "Clear formatting" },
+  { kind: "clear", label: "Clear", title: "Clear formatting" },
 ];
 
 type SendState = "idle" | "sending" | "sent" | "error";
@@ -177,6 +177,7 @@ export function PostEditor() {
                 key={tool.title}
                 type="button"
                 className={styles.toolButton}
+                data-face={tool.kind === "clear" ? "clear" : tool.style}
                 title={tool.title}
                 aria-label={tool.title}
                 onClick={() => runTool(tool)}
@@ -219,7 +220,7 @@ export function PostEditor() {
               {sendState === "sending" ? (
                 <HexLoader length={5} label="Sending" tone="dark" />
               ) : sendState === "sent" ? (
-                "Sent ✓"
+                "Sent"
               ) : (
                 "Send through automation"
               )}

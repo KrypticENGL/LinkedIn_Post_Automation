@@ -64,6 +64,11 @@
   text-overflow: ellipsis;
 }
 
+.icon {
+  vertical-align: -2px;
+  flex: none;
+}
+
 .ellipsis {
   color: rgba(0, 0, 0, 0.6);
   font-weight: 700;
