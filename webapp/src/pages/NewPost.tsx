@@ -121,23 +121,32 @@ export function NewPost({ value, onValueChange, entries, onEntriesChange }: Prop
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (!menuOpen || filtered.length === 0) return;
-    if (!NAV_KEYS.has(e.key)) return;
+    // Don't hijack Enter while an IME candidate window is open.
+    if (e.nativeEvent.isComposing) return;
 
-    if (e.key === "ArrowDown") {
+    if (menuOpen && filtered.length > 0 && NAV_KEYS.has(e.key)) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        const next = filtered[Math.min(activeIndex + 1, filtered.length - 1)];
+        setActiveId(next.id);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        const next = filtered[Math.max(activeIndex - 1, 0)];
+        setActiveId(next.id);
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        selectCommand(filtered[activeIndex] ?? filtered[0]);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        setMenuOpen(false);
+      }
+      return;
+    }
+
+    // Enter sends the post; Shift+Enter inserts a real newline.
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      const next = filtered[Math.min(activeIndex + 1, filtered.length - 1)];
-      setActiveId(next.id);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      const next = filtered[Math.max(activeIndex - 1, 0)];
-      setActiveId(next.id);
-    } else if (e.key === "Enter" || e.key === "Tab") {
-      e.preventDefault();
-      selectCommand(filtered[activeIndex] ?? filtered[0]);
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      setMenuOpen(false);
+      void handleSubmit();
     }
   }
 
